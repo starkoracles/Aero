@@ -1,0 +1,2 @@
+[workspace]
+members = ["miden-proof-generator", "miden-to-cairo-parser"]
