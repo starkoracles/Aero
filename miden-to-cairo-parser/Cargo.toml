@@ -15,4 +15,5 @@ winter_crypto = { package = "winter-crypto", path = "../winterfell/crypto", vers
 winter_air = { package = "winter-air", path = "../winterfell/air", version = "0.4", default-features = false }
 winter_fri = { package = "winter-fri", path = "../winterfell/fri", version = "0.4", default-features = false }
 miden-air = { path = "../miden/air", version = "0.3.0" }
+miden-core = { path = "../miden/core", version = "0.3.0" }
 winter-crypto = { version = "0.4.0", path = "../winterfell/crypto" }

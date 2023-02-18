@@ -1,13 +1,12 @@
-// #![feature(array_chunks)]
+#![feature(array_chunks)]
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, Read};
-use std::iter::zip;
 use winter_crypto::RandomCoin;
 use winter_fri::FriProof;
 use winter_math::log2;
 
-use winter_air::proof::{Commitments, Context, OodFrame, Queries};
+use winter_air::proof::{Commitments, Context, OodFrame, Queries, Table};
 use winter_air::{
     ConstraintCompositionCoefficients, DeepCompositionCoefficients, EvaluationFrame, ProofOptions,
     TraceLayout,
@@ -17,6 +16,7 @@ pub use winterfell::{Air, AirContext, FieldExtension, HashFunction, StarkProof};
 use winterfell::{AuxTraceRandElements, ConstraintQueries, DeepComposer, TraceQueries};
 
 use miden_air::{Felt, ProcessorAir, PublicInputs};
+use miden_core::ProgramOutputs;
 
 pub mod memory;
 use memory::{DynamicMemory, Writeable, WriteableWith};
@@ -40,20 +40,23 @@ impl BinaryProofData {
 
 impl Writeable for PublicInputs {
     fn write_into(&self, target: &mut DynamicMemory) {
-        self.init.write_into(target);
-        self.fin.write_into(target);
-        self.rc_min.write_into(target);
-        self.rc_max.write_into(target);
-        self.mem.write_into(target);
-        self.mem.0.len().write_into(target);
-        self.num_steps.write_into(target);
+        target.write_sized_array(self.program_hash.as_bytes().to_vec());
+        target.write_sized_array(self.stack_inputs.clone());
+        self.outputs.write_into(target);
+    }
+}
+
+impl Writeable for ProgramOutputs {
+    fn write_into(&self, target: &mut DynamicMemory) {
+        target.write_sized_array(self.stack.clone());
+        target.write_sized_array(self.overflow_addrs.clone());
     }
 }
 
 impl Writeable for (&u64, Felt) {
     fn write_into(&self, target: &mut DynamicMemory) {
         self.0.write_into(target);
-        self.1.write_into(target);
+        Writeable::write_into(&self.1, target);
     }
 }
 
@@ -151,9 +154,17 @@ impl WriteableWith<&ProcessorAir> for Queries {
     }
 }
 
+impl Writeable for Table<Felt> {
+    fn write_into(&self, target: &mut DynamicMemory) {
+        self.num_rows().write_into(target);
+        self.num_columns().write_into(target);
+        target.write_array(self.data().to_vec());
+    }
+}
+
 impl Writeable for ByteDigest<32> {
     fn write_into(&self, target: &mut DynamicMemory) {
-        for chunk in self.0.array_chunks::<4>() {
+        for chunk in self.0.to_vec().array_chunks::<4>() {
             let int = u32::from_le_bytes(*chunk);
             int.write_into(target);
         }
@@ -214,13 +225,7 @@ impl Writeable for EvaluationFrame<Felt> {
 
 impl Writeable for Felt {
     fn write_into(&self, target: &mut DynamicMemory) {
-        let mut hex_string = "0x".to_owned();
-        for chunk in self.to_raw().0.iter().rev() {
-            for byte in chunk.to_be_bytes() {
-                hex_string += format!("{:02x?}", byte).as_str();
-            }
-        }
-        target.write_hex_value(hex_string);
+        target.write_value(self.inner());
     }
 }
 
@@ -277,7 +282,7 @@ impl WriteableWith<ProcessorAirParams<'_>> for ProcessorAir {
         self.context().num_assertions().write_into(target);
 
         self.ce_blowup_factor().write_into(target);
-        self.eval_frame_size::<Felt>().write_into(target);
+        // self.eval_frame_size::<Felt>().write_into(target);
 
         self.trace_domain_generator().write_into(target);
         self.lde_domain_generator().write_into(target);
@@ -330,7 +335,7 @@ impl Writeable for DeepCompositionCoefficients<Felt> {
     fn write_into(&self, target: &mut DynamicMemory) {
         let mut child_target = target.alloc();
         for elem in &self.trace {
-            child_target.write_sized_array(elem.to_vec());
+            child_target.write_sized_array(vec![elem.0, elem.1, elem.2]);
         }
         target.write_array(self.constraints.clone());
         self.degree.0.write_into(target);
