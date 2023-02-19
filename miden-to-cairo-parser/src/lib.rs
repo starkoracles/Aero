@@ -7,7 +7,7 @@ use winter_fri::FriProof;
 use winter_math::log2;
 
 use winter_air::proof::{Commitments, Context, OodFrame, Queries, Table};
-use winter_air::{
+pub use winter_air::{
     ConstraintCompositionCoefficients, DeepCompositionCoefficients, EvaluationFrame, ProofOptions,
     TraceLayout,
 };
@@ -15,7 +15,7 @@ use winter_crypto::{hash::ByteDigest, hashers::Blake2s_256, Digest};
 pub use winterfell::{Air, AirContext, FieldExtension, HashFunction, StarkProof};
 use winterfell::{AuxTraceRandElements, ConstraintQueries, DeepComposer, TraceQueries};
 
-use miden_air::{Felt, ProcessorAir, PublicInputs};
+pub use miden_air::{Felt, ProcessorAir, PublicInputs};
 use miden_core::ProgramOutputs;
 
 pub mod memory;
