@@ -1,6 +1,5 @@
 use miden::{prove, Assembler, Program, ProgramInputs, ProofOptions};
 use miden_air::PublicInputs;
-use miden_core::ProgramOutputs;
 use miden_core::{utils::Serializable, Felt, FieldElement, StarkField};
 use miden_stdlib::StdLibrary;
 use serde::{Deserialize, Serialize};
