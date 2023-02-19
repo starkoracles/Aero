@@ -7,7 +7,8 @@ edition = "2021"
 bincode = "1.3.3"
 env_logger = "0.10.0"
 log = "0.4.17"
-miden = { git = "https://github.com/0xPolygonMiden/miden-vm.git", version = "0.3.0" }
-miden-core = { git = "https://github.com/0xPolygonMiden/miden-vm.git", version = "0.3.0" }
-miden-stdlib = { git = "https://github.com/0xPolygonMiden/miden-vm.git", version = "0.2.0" }
+miden = { version = "0.3.0", path = "../miden/miden" }
+miden-core = { version = "0.3.0", path = "../miden/core" }
+miden-stdlib = { version = "0.2.0", path = "../miden/stdlib" }
+miden-air = {version = "0.3.0", path = "../miden/air"}
 serde = { version = "1.0.152", features = ["derive"] }

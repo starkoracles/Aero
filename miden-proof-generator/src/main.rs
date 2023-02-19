@@ -1,4 +1,6 @@
 use miden::{prove, Assembler, Program, ProgramInputs, ProofOptions};
+use miden_air::PublicInputs;
+use miden_core::ProgramOutputs;
 use miden_core::{utils::Serializable, Felt, FieldElement, StarkField};
 use miden_stdlib::StdLibrary;
 use serde::{Deserialize, Serialize};
@@ -33,11 +35,13 @@ fn main() {
     );
 
     // execute program and generate proof
-    let (_, proof) = prove(&program, &input_data, &proof_security)
+    let (outputs, proof) = prove(&program, &input_data, &proof_security)
         .map_err(|err| format!("Failed to prove program - {:?}", err))
         .unwrap();
 
-    let input_bytes = input_data.stack_init().to_bytes();
+    let mut input_bytes = vec![];
+    PublicInputs::new(program.hash(), input_data.stack_init().to_vec(), outputs)
+        .write_into(&mut input_bytes);
     let proof_bytes = proof.to_bytes();
     println!("Proof size: {:.1} KB", proof_bytes.len() as f64 / 1024f64);
 
