@@ -1,4 +1,5 @@
 #![feature(array_chunks)]
+use miden_air::StarkField;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -225,7 +226,12 @@ impl Writeable for EvaluationFrame<Felt> {
 
 impl Writeable for Felt {
     fn write_into(&self, target: &mut DynamicMemory) {
-        target.write_value(self.inner());
+        let raw = self.as_int();
+        let mut hex_string = "0x".to_owned();
+        for byte in raw.to_be_bytes().iter() {
+            hex_string.push_str(&format!("{:02x}", byte));
+        }
+        target.write_hex_value(hex_string);
     }
 }
 
