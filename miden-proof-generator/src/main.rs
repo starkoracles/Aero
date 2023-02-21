@@ -1,16 +1,10 @@
 use miden::{prove, Assembler, Program, ProgramInputs, ProofOptions};
 use miden_air::PublicInputs;
-use miden_core::{utils::Serializable, Felt, FieldElement, StarkField};
+use miden_core::{Felt, FieldElement, StarkField};
+use miden_proof_generator::ProofData;
 use miden_stdlib::StdLibrary;
-use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
-
-#[derive(Serialize, Deserialize)]
-struct ProofData {
-    input_bytes: Vec<u8>,
-    proof_bytes: Vec<u8>,
-}
 
 fn main() {
     println!("============================================================");
@@ -38,9 +32,9 @@ fn main() {
         .map_err(|err| format!("Failed to prove program - {:?}", err))
         .unwrap();
 
-    let mut input_bytes = vec![];
-    PublicInputs::new(program.hash(), input_data.stack_init().to_vec(), outputs)
-        .write_into(&mut input_bytes);
+    let pub_inputs = PublicInputs::new(program.hash(), input_data.stack_init().to_vec(), outputs);
+    let input_bytes = pub_inputs.to_bytes();
+
     let proof_bytes = proof.to_bytes();
     println!("Proof size: {:.1} KB", proof_bytes.len() as f64 / 1024f64);
 
@@ -49,6 +43,9 @@ fn main() {
         input_bytes,
         proof_bytes,
     };
+
+    miden_verifier::verify(pub_inputs.program_hash, &[0, 1], &pub_inputs.outputs, proof).unwrap();
+
     let b = bincode::serialize(&data).unwrap();
     let mut f = File::create("proofs/fib.bin").unwrap();
     f.write_all(&b).unwrap();

@@ -149,6 +149,15 @@ pub trait WriteableWith<Parameters> {
     }
 }
 
+impl Writeable for Vec<u8> {
+    fn write_into(&self, target: &mut DynamicMemory) {
+        target.write_value(self.len() as u64);
+        for byte in self {
+            target.write_value(*byte as u64);
+        }
+    }
+}
+
 impl Writeable for u8 {
     fn write_into(&self, target: &mut DynamicMemory) {
         target.write_value(*self as u64)

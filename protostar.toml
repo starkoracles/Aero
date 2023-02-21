@@ -1,0 +1,8 @@
+[project]
+protostar-version = "0.9.0"
+lib-path = "src"
+cairo_path = ["src"]
+
+[profile.integration.test]
+target = ["tests/integration"]
+cairo-path = ["src"]

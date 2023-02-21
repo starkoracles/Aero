@@ -17,3 +17,4 @@ winter_fri = { package = "winter-fri", path = "../winterfell/fri", version = "0.
 miden-air = { path = "../miden/air", version = "0.3.0" }
 miden-core = { path = "../miden/core", version = "0.3.0" }
 winter-crypto = { version = "0.4.0", path = "../winterfell/crypto" }
+miden_proof_generator = { path = "../miden-proof-generator", version = "0.1.0" }
