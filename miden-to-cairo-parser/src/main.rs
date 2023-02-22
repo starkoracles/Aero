@@ -1,3 +1,4 @@
+use miden_air::StarkField;
 use miden_to_cairo_parser::{
     memory::{Writeable, WriteableWith},
     Air, BinaryProofData, Felt, FriProofParams, ProcessorAir, PublicInputs, StarkProof,

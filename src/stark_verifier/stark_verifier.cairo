@@ -7,6 +7,7 @@ from starkware.cairo.common.hash import HashBuiltin
 from starkware.cairo.common.math import assert_lt, assert_le
 from starkware.cairo.common.registers import get_fp_and_pc
 from starkware.cairo.common.uint256 import Uint256
+from starkware.cairo.common.serialize import serialize_word
 from starkware.cairo.common.pow import pow
 
 from stark_verifier.air.air_instance import (

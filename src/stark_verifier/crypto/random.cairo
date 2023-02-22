@@ -162,11 +162,7 @@ func draw{
     alloc_locals;
     let digest = merge_with_int(seed=public_coin.seed, value=public_coin.counter + 1);
     let public_coin = PublicCoin(public_coin.seed, public_coin.counter + 1);
-
-    let low = digest[0] + digest[1] * 2 ** 32 + digest[2] * 2 ** 64 + digest[3] * 2 ** 96;
-    let high = digest[4] + digest[5] * 2 ** 32 + digest[6] * 2 ** 64 + digest[7] * 2 ** 96;
-
-    return high * 2 ** 128 + low;
+    return digest[1] + digest[0] * 2 ** 32;
 }
 
 func draw_pair{
@@ -265,17 +261,17 @@ func seed_with_pub_inputs{
         blake2s_add_felts(
             n_elements=pub_inputs.program_hash_len, elements=pub_inputs.program_hash, bigend=0
         );
-        blake2s_add_felts(
-            n_elements=pub_inputs.stack_inputs_len, elements=pub_inputs.stack_inputs, bigend=0
-        );
-        blake2s_add_felts(
-            n_elements=pub_inputs.outputs.stack_len, elements=pub_inputs.outputs.stack, bigend=0
-        );
-        blake2s_add_felts(
-            n_elements=pub_inputs.outputs.overflow_addrs_len,
-            elements=pub_inputs.outputs.overflow_addrs,
-            bigend=0,
-        );
+        // blake2s_add_felts(
+        //     n_elements=pub_inputs.stack_inputs_len, elements=pub_inputs.stack_inputs, bigend=0
+        // );
+        // blake2s_add_felts(
+        //     n_elements=pub_inputs.outputs.stack_len, elements=pub_inputs.outputs.stack, bigend=0
+        // );
+        // blake2s_add_felts(
+        //     n_elements=pub_inputs.outputs.overflow_addrs_len,
+        //     elements=pub_inputs.outputs.overflow_addrs,
+        //     bigend=0,
+        // );
     }
 
     let n_bytes = (data - data_start) * 4;
