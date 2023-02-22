@@ -1,9 +1,7 @@
-use miden_proof_generator::SeedData;
 use miden_to_cairo_parser::{
     memory::{Writeable, WriteableWith},
     Air, BinaryProofData, Felt, FriProofParams, ProcessorAir, PublicInputs, StarkProof,
 };
-use serde::Deserialize;
 use serde_json::from_str;
 use winter_crypto::hashers::Blake2s_256;
 use winter_utils::{Deserializable, SliceReader};

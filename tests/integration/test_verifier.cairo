@@ -4,7 +4,7 @@ from starkware.cairo.common.cairo_builtins import BitwiseBuiltin
 from starkware.cairo.common.hash import HashBuiltin
 
 from stark_verifier.air.stark_proof import read_stark_proof, StarkProof
-from stark_verifier.air.pub_inputs import read_public_inputs, PublicInputs, read_seed_data, SeedData
+from stark_verifier.air.pub_inputs import read_public_inputs, PublicInputs
 from stark_verifier.stark_verifier import verify
 
 // / Test deserialization of StarkProof from file
@@ -38,9 +38,13 @@ func test_read_pub_inputs{}() {
     %{
         # TODO: Assert that all proof fields were deserialized correctly using utils.py
         print('program_hash:', ids.pub_inputs.program_hash)
+        print('program_hash_len:', ids.pub_inputs.program_hash_len)
         print('stack_inputs:', ids.pub_inputs.stack_inputs)
+        print('stack_inputs_len:', ids.pub_inputs.stack_inputs_len)
         print('ouputs.stack:', ids.pub_inputs.outputs.stack)
+        print('outputs.stack_len:', ids.pub_inputs.outputs.stack_len)
         print('ouputs.overflow_addrs:', ids.pub_inputs.outputs.overflow_addrs)
+        print('outputs.overflow_addrs_len:', ids.pub_inputs.outputs.overflow_addrs_len)
     %}
     return ();
 }
@@ -59,12 +63,6 @@ func test_verify{range_check_ptr, pedersen_ptr: HashBuiltin*, bitwise_ptr: Bitwi
     %}
     let proof: StarkProof* = read_stark_proof();
 
-    %{
-        from tests.integration.utils import parse_seed_data
-        json_data = parse_seed_data('fib')
-    %}
-    let seed_data: SeedData* = read_seed_data();
-
-    verify(proof, pub_inputs, seed_data);
+    verify(proof, pub_inputs);
     return ();
 }

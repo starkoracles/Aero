@@ -18,7 +18,7 @@ from starkware.cairo.common.memset import memset
 from utils.pow2 import pow2
 from utils.endianness import byteswap32
 
-from stark_verifier.air.pub_inputs import MemEntry, SeedData, read_mem_values
+from stark_verifier.air.pub_inputs import MemEntry, PublicInputs, read_mem_values
 from stark_verifier.air.transitions.frame import EvaluationFrame
 
 // Pseudo-random element generator for finite fields.
@@ -257,13 +257,24 @@ func draw_integers{
 
 func seed_with_pub_inputs{
     range_check_ptr, blake2s_ptr: felt*, pedersen_ptr: HashBuiltin*, bitwise_ptr: BitwiseBuiltin*
-}(seed_data: SeedData*) -> felt* {
+}(pub_inputs: PublicInputs*) -> felt* {
     alloc_locals;
     let (data: felt*) = alloc();
     let data_start = data;
     with data {
         blake2s_add_felts(
-            n_elements=seed_data.num_elements, elements=seed_data.seed_bytes, bigend=0
+            n_elements=pub_inputs.program_hash_len, elements=pub_inputs.program_hash, bigend=0
+        );
+        blake2s_add_felts(
+            n_elements=pub_inputs.stack_inputs_len, elements=pub_inputs.stack_inputs, bigend=0
+        );
+        blake2s_add_felts(
+            n_elements=pub_inputs.outputs.stack_len, elements=pub_inputs.outputs.stack, bigend=0
+        );
+        blake2s_add_felts(
+            n_elements=pub_inputs.outputs.overflow_addrs_len,
+            elements=pub_inputs.outputs.overflow_addrs,
+            bigend=0,
         );
     }
 

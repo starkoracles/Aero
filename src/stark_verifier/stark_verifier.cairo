@@ -16,7 +16,7 @@ from stark_verifier.air.air_instance import (
     get_deep_composition_coefficients,
     ConstraintCompositionCoefficients,
 )
-from stark_verifier.air.pub_inputs import PublicInputs, SeedData
+from stark_verifier.air.pub_inputs import PublicInputs
 from stark_verifier.air.stark_proof import TraceLayout, ProofOptions, StarkProof, read_stark_proof
 from stark_verifier.air.trace_info import TraceInfo
 from stark_verifier.channel import (
@@ -62,7 +62,7 @@ from stark_verifier.air.pub_inputs import read_public_inputs
 // Winterfell verifier code (see https://github.com/novifinancial/winterfell and the associated
 // LICENSE.winterfell.md)
 func verify{range_check_ptr, pedersen_ptr: HashBuiltin*, bitwise_ptr: BitwiseBuiltin*}(
-    proof: StarkProof*, pub_inputs: PublicInputs*, seed_data: SeedData*
+    proof: StarkProof*, pub_inputs: PublicInputs*
 ) {
     alloc_locals;
 
@@ -79,7 +79,7 @@ func verify{range_check_ptr, pedersen_ptr: HashBuiltin*, bitwise_ptr: BitwiseBui
     local blake2s_ptr_start: felt* = blake2s_ptr;
 
     // Build a seed for the public coin; the initial seed is the hash of public inputs
-    let public_coin_seed: felt* = seed_with_pub_inputs{blake2s_ptr=blake2s_ptr}(seed_data);
+    let public_coin_seed: felt* = seed_with_pub_inputs{blake2s_ptr=blake2s_ptr}(pub_inputs);
 
     // Create an AIR instance for the computation specified in the proof.
     let air = air_instance_new(proof, pub_inputs, proof.context.options);

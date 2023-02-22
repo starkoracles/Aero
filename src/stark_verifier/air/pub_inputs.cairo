@@ -8,19 +8,18 @@ struct MemEntry {
 }
 
 struct ProgramOutputs {
+    stack_len: felt,
     stack: felt*,
+    overflow_addrs_len: felt,
     overflow_addrs: felt*,
 }
 
 struct PublicInputs {
+    program_hash_len: felt,
     program_hash: felt*,
+    stack_inputs_len: felt,
     stack_inputs: felt*,
     outputs: ProgramOutputs,
-}
-
-struct SeedData {
-    seed_bytes: felt*,
-    num_elements: felt,
 }
 
 func read_public_inputs() -> PublicInputs* {
@@ -30,15 +29,6 @@ func read_public_inputs() -> PublicInputs* {
         write_into_memory(ids.pub_inputs_ptr, json_data, segments)
     %}
     return pub_inputs_ptr;
-}
-
-func read_seed_data() -> SeedData* {
-    let (seed_data_ptr: SeedData*) = alloc();
-    %{
-        from src.stark_verifier.utils import write_into_memory
-        write_into_memory(ids.seed_data_ptr, json_data, segments)
-    %}
-    return seed_data_ptr;
 }
 
 func read_mem_values(mem: MemEntry*, address: felt, length: felt, output: felt*) {

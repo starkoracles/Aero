@@ -41,7 +41,8 @@ impl BinaryProofData {
 
 impl Writeable for PublicInputs {
     fn write_into(&self, target: &mut DynamicMemory) {
-        target.write_sized_array(self.program_hash.as_elements().to_vec());
+        let program_hash_elements = self.program_hash.as_elements();
+        target.write_sized_array(program_hash_elements.to_vec());
         target.write_sized_array(self.stack_inputs.clone());
         self.outputs.write_into(target);
     }
