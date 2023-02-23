@@ -114,10 +114,10 @@ func perform_verification{
     // // 1 ----- Trace commitment -------------------------------------------------------------------
 
     // // Read the commitments to evaluations of the trace polynomials over the LDE domain.
-    // let trace_commitments = read_trace_commitments();
+    let trace_commitments = read_trace_commitments();
 
-    // // Reseed the coin with the commitment to the main trace segment
-    // reseed_endian(value=trace_commitments);
+    // Reseed the coin with the commitment to the main trace segment
+    reseed_endian(value=trace_commitments);
 
     // // Process auxiliary trace segments to build a set of random elements for each segment,
     // // and to reseed the coin.
@@ -214,12 +214,13 @@ func perform_verification{
     // }
 
     // // Draw pseudorandom query positions for the LDE domain from the public coin.
-    // let (query_positions: felt*) = alloc();
-    // draw_integers(
-    //     n_elements=air.options.num_queries,
-    //     elements=query_positions,
-    //     domain_size=air.context.lde_domain_size,
-    // );
+    let (local query_positions: felt*) = alloc();
+    draw_integers(
+        n_elements=air.options.num_queries,
+        elements=query_positions,
+        domain_size=air.context.lde_domain_size,
+    );
+    %{ print("query_positions:", [memory[ids.query_positions + i] for i in range(ids.air.options.num_queries)]) %}
 
     // // Read evaluations of trace and constraint composition polynomials at the queried positions.
     // // This also checks that the read values are valid against trace and constraint commitments.
