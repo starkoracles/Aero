@@ -261,17 +261,17 @@ func seed_with_pub_inputs{
         blake2s_add_felts(
             n_elements=pub_inputs.program_hash_len, elements=pub_inputs.program_hash, bigend=0
         );
-        // blake2s_add_felts(
-        //     n_elements=pub_inputs.stack_inputs_len, elements=pub_inputs.stack_inputs, bigend=0
-        // );
-        // blake2s_add_felts(
-        //     n_elements=pub_inputs.outputs.stack_len, elements=pub_inputs.outputs.stack, bigend=0
-        // );
-        // blake2s_add_felts(
-        //     n_elements=pub_inputs.outputs.overflow_addrs_len,
-        //     elements=pub_inputs.outputs.overflow_addrs,
-        //     bigend=0,
-        // );
+        blake2s_add_felts(
+            n_elements=pub_inputs.stack_inputs_len, elements=pub_inputs.stack_inputs, bigend=0
+        );
+        blake2s_add_felts(
+            n_elements=pub_inputs.outputs.stack_len, elements=pub_inputs.outputs.stack, bigend=0
+        );
+        blake2s_add_felts(
+            n_elements=pub_inputs.outputs.overflow_addrs_len,
+            elements=pub_inputs.outputs.overflow_addrs,
+            bigend=0,
+        );
     }
 
     let n_bytes = (data - data_start) * 4;
