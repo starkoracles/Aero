@@ -38,6 +38,7 @@ make integration_test
 ## Roadmap
 
 * Add FRI verification
+* Resolve code TODO - Trace queries 4 -> 54
 * Add AIR verification
 * Enable extension field for security 
 * Deploy on Starknet

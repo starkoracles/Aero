@@ -1,5 +1,3 @@
-
-
 from starkware.cairo.common.memcpy import memcpy
 
 from utils.serialize import UINT32_SIZE
@@ -19,6 +17,8 @@ func assert_hashes_equal(hash1: felt*, hash2: felt*) {
     // We're doing some odd gymnastics here,
     // because in Cairo it isn't straight-forward to determine if a variable is uninitialized.
     // The hack `assert 0 = a - b` ensures that both `a` and `b` are initialized.
+    let h1 = hash1[0];
+    let h2 = hash2[0];
     assert 0 = hash1[0] - hash2[0];
     assert 0 = hash1[1] - hash2[1];
     assert 0 = hash1[2] - hash2[2];

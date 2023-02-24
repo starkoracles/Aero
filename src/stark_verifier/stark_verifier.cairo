@@ -225,9 +225,11 @@ func perform_verification{
 
     // Read evaluations of trace and constraint composition polynomials at the queried positions.
     // This also checks that the read values are valid against trace and constraint commitments.
-    // let (queried_main_trace_states, queried_aux_trace_states) = read_queried_trace_states(
-    //     query_positions
-    // );
+    let (queried_main_trace_states, queried_aux_trace_states) = read_queried_trace_states(
+        positions=query_positions,
+        num_queries=air.options.num_queries,
+        num_aux_segments=air.context.trace_layout.num_aux_segments,
+    );
     // let queried_constraint_evaluations = read_constraint_evaluations(query_positions);
 
     // // 6 ----- DEEP composition -------------------------------------------------------------------

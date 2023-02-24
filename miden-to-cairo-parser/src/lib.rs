@@ -363,6 +363,11 @@ impl WriteableWith<&[usize]> for TraceQueries<Felt, Blake2s_256<Felt>> {
     fn write_into(&self, target: &mut DynamicMemory, indexes: &[usize]) {
         for query_proof in &self.query_proofs {
             let paths = query_proof.into_paths(indexes).unwrap();
+            // for p in &paths[0] {
+            //     for word in p.to_words() {
+            //         println!("{:2x}", word);
+            //     }
+            // }
             let mut child_target = target.alloc();
             for path in paths {
                 child_target.write_sized_array(path);
