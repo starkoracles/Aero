@@ -230,7 +230,9 @@ func perform_verification{
         num_queries=air.options.num_queries,
         num_aux_segments=air.context.trace_layout.num_aux_segments,
     );
-    // let queried_constraint_evaluations = read_constraint_evaluations(query_positions);
+    let queried_constraint_evaluations = read_constraint_evaluations(
+        positions=query_positions, num_queries=air.options.num_queries
+    );
 
     // // 6 ----- DEEP composition -------------------------------------------------------------------
 
