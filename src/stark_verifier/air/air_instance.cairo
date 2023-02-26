@@ -14,10 +14,6 @@ from stark_verifier.crypto.random import (
 from stark_verifier.air.pub_inputs import PublicInputs
 from stark_verifier.air.stark_proof import ProofContext, ProofOptions, StarkProof
 
-// 2-adic root of unity for field with modulus $2^{251} + 17 \cdot 2^{192} + 1$
-const TWO_ADICITY = 192; 
-const G = 145784604816374866144131285430889962727208297722245411306711449302875041684;
-
 struct AirInstance {
     // Layout
     main_segment_width: felt,
@@ -31,7 +27,7 @@ struct AirInstance {
     num_transition_constraints: felt,
     num_assertions: felt,
     ce_blowup_factor: felt,
-    eval_frame_size: felt,
+    // eval_frame_size: felt,
     trace_domain_generator: felt,
     lde_domain_generator: felt,
     // Public input
@@ -74,12 +70,25 @@ func air_instance_new{
     let (aux_segment_widths: felt*) = alloc();
     let (aux_segment_rands: felt*) = alloc();
 
-    let (power) = pow(2, TWO_ADICITY - proof.context.log_trace_length);
-    let (trace_domain_generator) = pow(G, power);
-    
-    let log_lde_domain_size = options.log_blowup_factor + proof.context.log_trace_length;
-    let (power) = pow(2, TWO_ADICITY - log_lde_domain_size);
-    let (lde_domain_generator) = pow(G, power);
+    let trace_domain_generator = [range_check_ptr];
+    let lde_domain_generator = [range_check_ptr + 1];
+    let range_check_ptr = range_check_ptr + 2;
+
+    %{
+        # TODO this is insecure
+        # 2-adic root of unity for field with modulus $2^{64} - 2^{32} + 1$
+        TWO_ADICITY = 32
+        # 2^32 root of unity
+        G = 1753635133440165772
+
+        PG = 18446744069414584321 # 2^64 - 2^32 - 1
+        power = pow(2, TWO_ADICITY - ids.proof.context.log_trace_length, PG)
+        ids.trace_domain_generator = pow(G, power, PG)
+
+        log_lde_domain_size = ids.options.log_blowup_factor + ids.proof.context.log_trace_length
+        power = pow(2, TWO_ADICITY - log_lde_domain_size, PG)
+        ids.lde_domain_generator = pow(G, power, PG)
+    %}
 
     // TODO: Make configurable for other VMs and custom AIRs
     let res = AirInstance(
@@ -93,7 +102,7 @@ func air_instance_new{
         num_transition_constraints=49,
         num_assertions=7,
         ce_blowup_factor=4,
-        eval_frame_size=2,
+        // eval_frame_size=2,
         trace_domain_generator=trace_domain_generator,
         lde_domain_generator=lde_domain_generator,
         pub_inputs=pub_inputs,
@@ -140,7 +149,7 @@ func get_deep_composition_coefficients{
     let (t_coefficients: TraceCoefficients*) = alloc();
     set_trace_coefficients(
         n_vec= air.main_segment_width + air.aux_trace_width,
-        n_coefficients= air.eval_frame_size + 1, // TODO: Why +1 ???
+        n_coefficients=air.context.trace_layout.main_segment_width, // TODO: Why +1 ???
         coefficients=t_coefficients,
     );
 

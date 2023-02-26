@@ -1,7 +1,12 @@
+.PHONY: clean
+
 BIN_DIR = ./bin
 STARK_PARSER = $(BIN_DIR)/stark_parser
 
-$(STARK_PARSER): $(addprefix miden-to-cairo-parser/src/,lib.rs main.rs memory.rs)
+clean: 
+	rm -rf $(BIN_DIR)
+
+$(STARK_PARSER): 
 	cargo build;
 	mkdir -p bin;
 	cp target/debug/miden_to_cairo_parser bin/stark_parser

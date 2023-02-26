@@ -130,19 +130,25 @@ func perform_verification{
     );
 
     // // Build random coefficients for the composition polynomial
-    // let constraint_coeffs = get_constraint_composition_coefficients(air=air);
+    let constraint_coeffs = get_constraint_composition_coefficients(air=air);
 
     // 2 ----- Constraint commitment --------------------------------------------------------------
 
     // Read the commitment to evaluations of the constraint composition polynomial over the LDE
     // domain sent by the prover.
     let constraint_commitment = read_constraint_commitment();
+    %{
+        for i in range(8):
+            print('constraint_commitment[%d]' % i, hex(memory[ids.constraint_commitment + i]))
+    %}
 
     // Update the public coin.
     reseed_endian(value=constraint_commitment);
 
     // Draw an out-of-domain point z from the coin.
     let z = draw();
+
+    %{ print('z', ids.z) %}
 
     // 3 ----- OOD consistency check --------------------------------------------------------------
 
@@ -234,12 +240,16 @@ func perform_verification{
         positions=query_positions, num_queries=air.options.num_queries
     );
 
-    // // 6 ----- DEEP composition -------------------------------------------------------------------
+    // 6 ----- DEEP composition -------------------------------------------------------------------
 
-    // // Compute evaluations of the DEEP composition polynomial at the queried positions.
-    // let composer = deep_composer_new(
-    //     air=air, query_positions=query_positions, z=z, cc=deep_coefficients
-    // );
+    // Compute evaluations of the DEEP composition polynomial at the queried positions.
+    let composer = deep_composer_new(
+        air=air, query_positions=query_positions, z=z, cc=deep_coefficients
+    );
+    %{
+        coeffs = [memory[ids.composer.x_coordinates + i] for i in range(0, 27)]
+        print("deep", coeffs, ids.composer.z_curr, ids.composer.z_next)
+    %}
     // let t_composition = compose_trace_columns(
     //     composer,
     //     queried_main_trace_states,
@@ -279,6 +289,10 @@ func process_aux_segments{
     let (elements) = alloc();
     assert [aux_trace_rand_elements] = elements;
     draw_elements(n_elements=[aux_segment_rands], elements=elements);
+    %{
+        for i in range(memory[ids.aux_segment_rands]):
+            print('aux_segment_rands[%d] = ' % i, memory[ids.elements + i])
+    %}
     reseed_endian(value=trace_commitments);
     process_aux_segments(
         trace_commitments=trace_commitments + STATE_SIZE_FELTS,
