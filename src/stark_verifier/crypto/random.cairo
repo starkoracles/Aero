@@ -162,7 +162,7 @@ func draw{
     alloc_locals;
     let digest = merge_with_int(seed=public_coin.seed, value=public_coin.counter + 1);
     let public_coin = PublicCoin(public_coin.seed, public_coin.counter + 1);
-    return digest[1] + digest[0] * 2 ** 32;
+    return digest[0] + digest[1] * 2 ** 32;
 }
 
 func draw_pair{

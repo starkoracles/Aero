@@ -7,7 +7,7 @@ from starkware.cairo.common.alloc import alloc
 from stark_verifier.air.stark_proof import read_stark_proof, StarkProof
 from stark_verifier.air.pub_inputs import read_public_inputs, PublicInputs
 from stark_verifier.stark_verifier import verify
-from stark_verifier.crypto.random import random_coin_new, seed_with_pub_inputs, draw_integers
+from stark_verifier.crypto.random import random_coin_new, seed_with_pub_inputs, draw_integers, draw
 from starkware.cairo.common.cairo_blake2s.blake2s import finalize_blake2s, blake2s_as_words
 
 // / Test deserialization of StarkProof from file
@@ -100,10 +100,12 @@ func test_draw{range_check_ptr, bitwise_ptr: BitwiseBuiltin*, pedersen_ptr: Hash
     let domain_size = 64;
 
     with public_coin, blake2s_ptr {
+        let r_element = draw();
+        %{ assert ids.r_element == 15636605459427237624 %}
         draw_integers(n_elements=n_elements, elements=elements, domain_size=64);
     }
     %{
-        expected = [56, 55, 46, 17, 44, 61, 8, 43, 39, 19, 3, 26, 31, 30, 4, 37, 40, 49, 7, 29]
+        expected = [55, 46, 17, 44, 61, 8, 43, 39, 19, 3, 26, 31, 30, 4, 37, 40, 49, 7, 56, 29]
         for i in range(ids.n_elements):
             assert memory[ids.elements + i] == expected[i]
     %}

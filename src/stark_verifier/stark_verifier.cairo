@@ -283,15 +283,17 @@ func process_aux_segments{
     aux_segment_rands: felt*,
     aux_trace_rand_elements: felt**,
 ) {
+    alloc_locals;
     if (trace_commitments_len == 0) {
         return ();
     }
     let (elements) = alloc();
+    local elements_saved: felt* = elements;
     assert [aux_trace_rand_elements] = elements;
     draw_elements(n_elements=[aux_segment_rands], elements=elements);
     %{
         for i in range(memory[ids.aux_segment_rands]):
-            print('aux_segment_rands[%d] = ' % i, memory[ids.elements + i])
+            print('aux_segment_rands[%d] = ' % i, memory[ids.elements_saved + i])
     %}
     reseed_endian(value=trace_commitments);
     process_aux_segments(
