@@ -137,19 +137,11 @@ func perform_verification{
     // Read the commitment to evaluations of the constraint composition polynomial over the LDE
     // domain sent by the prover.
     let constraint_commitment = read_constraint_commitment();
-    %{
-        for i in range(8):
-            print('constraint_commitment[%d]' % i, hex(memory[ids.constraint_commitment + i]))
-    %}
-
     // Update the public coin.
     reseed_endian(value=constraint_commitment);
 
     // Draw an out-of-domain point z from the coin.
     let z = draw();
-
-    %{ print('z', ids.z) %}
-
     // 3 ----- OOD consistency check --------------------------------------------------------------
 
     // Read the out-of-domain trace frames (the main trace frame and auxiliary trace frame, if
@@ -291,10 +283,6 @@ func process_aux_segments{
     local elements_saved: felt* = elements;
     assert [aux_trace_rand_elements] = elements;
     draw_elements(n_elements=[aux_segment_rands], elements=elements);
-    %{
-        for i in range(memory[ids.aux_segment_rands]):
-            print('aux_segment_rands[%d] = ' % i, memory[ids.elements_saved + i])
-    %}
     reseed_endian(value=trace_commitments);
     process_aux_segments(
         trace_commitments=trace_commitments + STATE_SIZE_FELTS,

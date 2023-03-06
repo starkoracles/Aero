@@ -6,3 +6,7 @@ cairo_path = ["src"]
 [profile.integration.test]
 target = ["tests/integration"]
 cairo-path = ["src"]
+
+[profile.unit.test]
+target = ["tests/unit"]
+cairo-path = ["src"]

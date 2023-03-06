@@ -4,7 +4,7 @@ from starkware.cairo.common.registers import get_ap, get_fp_and_pc
 const PG = 18446744069414584321;
 
 // multiply to felts modulo PG, these numbers must be smaller than PG
-func mul_goldilocks{range_check_ptr}(a: felt, b: felt) -> felt {
+func mul_g{range_check_ptr}(a: felt, b: felt) -> felt {
     // add range checks for a, b
     let res = a * b;
 
@@ -17,6 +17,91 @@ func mul_goldilocks{range_check_ptr}(a: felt, b: felt) -> felt {
         ids.q = ids.res // ids.PG
     %}
     assert q * PG + r = res;
+    return r;
+}
+
+func add_g{range_check_ptr}(a: felt, b: felt) -> felt {
+    let res = a + b;
+
+    let r = [range_check_ptr];
+    let q = [range_check_ptr + 1];
+    let range_check_ptr = range_check_ptr + 2;
+
+    %{
+        ids.r = ids.res % ids.PG
+        ids.q = ids.res // ids.PG
+    %}
+    assert q * PG + r = res;
+    return r;
+}
+
+func inv_g{range_check_ptr}(a: felt) -> felt {
+    let inv = [range_check_ptr];
+
+    %{
+        func exp_acc(base, tail, exp_bits) {
+            result = base
+            for i in range(exp_bits) {
+                result = (result**2)
+            }
+            return result * tail
+        }
+        # compute base^(M - 2) using 72 multiplications
+        # M - 2 = 0b1111111111111111111111111111111011111111111111111111111111111111
+        a = ids.a
+        # compute base^11
+        t2 = (a ** 2) * a
+
+        # compute base^111
+        t3 = (t2 ** 2) * a
+
+        # compute base^111111 (6 ones)
+        t6 = exp_acc(t3, t3, 3)
+
+        # compute base^111111111111 (12 ones)
+        t12 = exp_acc(t6, t6, 6)
+
+        # compute base^111111111111111111111111 (24 ones)
+        t24 = exp_acc(t12, t12, 12)
+
+        # compute base^1111111111111111111111111111111 (31 ones)
+        t30 = exp_acc(t24, t6, 6)
+        t31 = (t30 ** 2) * a
+
+        # compute base^111111111111111111111111111111101111111111111111111111111111111
+        t63 = exp_acc(t31, t31, 32)
+
+        # compute base^1111111111111111111111111111111011111111111111111111111111111111
+        ids.inv = (t63**2) * a
+    %}
+    assert inv * a = 1;
+    return inv;
+}
+
+func div_g{range_check_ptr}(a: felt, b: felt) -> felt {
+    let inv = inv_g(b);
+    return mul_g(a, inv);
+}
+
+func sub_g{range_check_ptr}(a: felt, b: felt) -> felt {
+    let r = [range_check_ptr];
+    let a_greater_than_b = [range_check_ptr + 1];
+    let range_check_ptr = range_check_ptr + 2;
+
+    %{
+        if ids.a < ids.b:
+            ids.r = ids.a + ids.PG - ids.b
+            ids.a_greater_than_b = 0
+        else:
+            ids.r = ids.a - ids.b
+            ids.a_greater_than_b = 1
+    %}
+
+    if (a_greater_than_b == 1) {
+        assert r = a - b;
+    } else {
+        assert r + b = a + PG;
+    }
     return r;
 }
 

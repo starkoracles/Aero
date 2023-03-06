@@ -17,3 +17,7 @@ generate_proof:
 integration_test: $(STARK_PARSER)
 	@echo "Running integration tests..."
 	PYTHONPATH=$$(echo pwd)/tests:$$(python -c "import site; print(site.getsitepackages()[0])"):$$PYTHONPATH protostar -p integration test --max-steps 100000000
+
+unit_test:
+	@echo "Running unit tests..."
+	PYTHONPATH=$$(echo pwd)/tests:$$(python -c "import site; print(site.getsitepackages()[0])"):$$PYTHONPATH protostar -p unit test
