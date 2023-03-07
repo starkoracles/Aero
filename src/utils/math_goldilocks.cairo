@@ -37,23 +37,28 @@ func add_g{range_check_ptr}(a: felt, b: felt) -> felt {
 
 func inv_g{range_check_ptr}(a: felt) -> felt {
     let inv = [range_check_ptr];
+    let range_check_ptr = range_check_ptr + 1;
 
     %{
-        func exp_acc(base, tail, exp_bits) {
+        def mul_g(a, b):
+            return (a * b) % ids.PG
+
+        def square_g(a):
+            return (a ** 2) % ids.PG
+            
+        def exp_acc(base, tail, exp_bits):
             result = base
-            for i in range(exp_bits) {
-                result = (result**2)
-            }
-            return result * tail
-        }
+            for i in range(exp_bits):
+                result = square_g(result)
+            return mul_g(result, tail)
         # compute base^(M - 2) using 72 multiplications
         # M - 2 = 0b1111111111111111111111111111111011111111111111111111111111111111
         a = ids.a
         # compute base^11
-        t2 = (a ** 2) * a
+        t2 = mul_g(square_g(a), a)
 
         # compute base^111
-        t3 = (t2 ** 2) * a
+        t3 = mul_g(square_g(t2), a)
 
         # compute base^111111 (6 ones)
         t6 = exp_acc(t3, t3, 3)
@@ -66,15 +71,15 @@ func inv_g{range_check_ptr}(a: felt) -> felt {
 
         # compute base^1111111111111111111111111111111 (31 ones)
         t30 = exp_acc(t24, t6, 6)
-        t31 = (t30 ** 2) * a
+        t31 = mul_g(square_g(t30), a)
 
         # compute base^111111111111111111111111111111101111111111111111111111111111111
         t63 = exp_acc(t31, t31, 32)
 
         # compute base^1111111111111111111111111111111011111111111111111111111111111111
-        ids.inv = (t63**2) * a
+        ids.inv = mul_g(square_g(t63), a)
     %}
-    assert inv * a = 1;
+    assert mul_g(inv, a) = 1;
     return inv;
 }
 
