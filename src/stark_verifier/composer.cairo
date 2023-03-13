@@ -5,7 +5,7 @@ from stark_verifier.air.air_instance import AirInstance, DeepCompositionCoeffici
 from stark_verifier.air.transitions.frame import EvaluationFrame
 from stark_verifier.channel import Table
 from stark_verifier.utils import Vec
-from utils.math_goldilocks import mul_g, sub_g, add_g, div_g
+from utils.math_goldilocks import mul_g, sub_g, add_g, div_g, pow_g
 
 struct DeepComposer {
     cc: DeepCompositionCoefficients,
@@ -193,6 +193,65 @@ func compose_trace_columns{range_check_ptr}(
     return with_aux_result;
 }
 
+func compose_constraint_evaluations_add_terms{range_check_ptr}(
+    composer: DeepComposer,
+    queried_evaluations: Table,
+    ood_evaluations: Vec,
+    row_ptr: felt*,
+    sum: felt,
+    idx: felt,
+    iter: felt,
+) -> felt {
+    if (idx == iter) {
+        return sum;
+    }
+
+    let r = row_ptr[idx];
+    let e = ood_evaluations.elements[idx];
+    let r1 = sub_g(r, e);
+    let c = composer.cc.constraints[idx];
+    let r2 = mul_g(r1, c);
+    let sum_new = add_g(sum, r2);
+
+    return compose_constraint_evaluations_add_terms(
+        composer, queried_evaluations, ood_evaluations, row_ptr, sum_new, idx + 1, iter
+    );
+}
+
+func compose_constraint_evaluations_loop{range_check_ptr}(
+    composer: DeepComposer,
+    queried_evaluations: Table,
+    ood_evaluations: Vec,
+    idx: felt,
+    result_ptr: felt*,
+    iterations: felt,
+    z_m: felt,
+) -> () {
+    alloc_locals;
+    if (idx == iterations) {
+        return ();
+    }
+
+    let row: felt* = queried_evaluations.elements;
+    let n_cols = queried_evaluations.n_cols;
+    let row_ptr = row + (idx * n_cols);
+    let cc_constraint: felt* = composer.cc.constraints;
+    let x_coord_ptr = composer.x_coordinates + idx;
+
+    let sum = compose_constraint_evaluations_add_terms(
+        composer, queried_evaluations, ood_evaluations, row_ptr, 0, 0, 8
+    );
+
+    tempvar x = [x_coord_ptr];
+    let div = sub_g(x, z_m);
+    tempvar sum_final = div_g(sum, div);
+    assert [result_ptr] = sum_final;
+
+    return compose_constraint_evaluations_loop(
+        composer, queried_evaluations, ood_evaluations, idx + 1, result_ptr + 1, iterations, z_m
+    );
+}
+
 func compose_constraint_evaluations{range_check_ptr}(
     composer: DeepComposer, queried_evaluations: Table, ood_evaluations: Vec
 ) -> felt* {
@@ -201,36 +260,16 @@ func compose_constraint_evaluations{range_check_ptr}(
     // Compute z^m
     let num_eval_columns = ood_evaluations.n_elements;
     let z = composer.z_curr;
-    let (local z_m) = pow(z, num_eval_columns);
+    let z_m = pow_g(z, num_eval_columns);
     local range_check_ptr = range_check_ptr;
-
-    local n_cols = queried_evaluations.n_cols;
-    local cc_constraint: felt* = composer.cc.constraints;
-
-    local row: felt* = queried_evaluations.elements;
     let (local result: felt*) = alloc();
-    // TODO: Don't hardcode number of queries
-    tempvar n = 54;
-    tempvar row_ptr = row;
-    tempvar x_coord_ptr = composer.x_coordinates;
+
     tempvar result_ptr = result;
 
-    loop:
-    tempvar sum = 0;
-
-    tempvar sum = sum + (row_ptr[0] - ood_evaluations.elements[0]) * cc_constraint[0];
-    tempvar sum = sum + (row_ptr[1] - ood_evaluations.elements[1]) * cc_constraint[1];
-    tempvar sum = sum + (row_ptr[2] - ood_evaluations.elements[2]) * cc_constraint[2];
-    tempvar sum = sum + (row_ptr[3] - ood_evaluations.elements[3]) * cc_constraint[3];
-    tempvar x = [x_coord_ptr];
-    tempvar sum = sum / (x - z_m);
-    assert [result_ptr] = sum;
-
-    tempvar n = n - 1;
-    tempvar row_ptr = row_ptr + n_cols;
-    tempvar x_coord_ptr = x_coord_ptr + 1;
-    tempvar result_ptr = result_ptr + 1;
-    jmp loop if n != 0;
+    // TODO HARDCODE: don't hardcode number of queries
+    compose_constraint_evaluations_loop(
+        composer, queried_evaluations, ood_evaluations, 0, result_ptr, 27, z_m
+    );
 
     return result;
 }

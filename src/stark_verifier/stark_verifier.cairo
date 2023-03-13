@@ -249,9 +249,9 @@ func perform_verification{
         ood_main_trace_frame,
         ood_aux_trace_frame,
     );
-    // let c_composition = compose_constraint_evaluations(
-    //     composer, queried_constraint_evaluations, ood_constraint_evaluations
-    // );
+    let c_composition = compose_constraint_evaluations(
+        composer, queried_constraint_evaluations, ood_constraint_evaluations
+    );
     // let deep_evaluations = combine_compositions(composer, t_composition, c_composition);
 
     // // 7 ----- Verify low-degree proof -------------------------------------------------------------
