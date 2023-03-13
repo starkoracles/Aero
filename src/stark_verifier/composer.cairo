@@ -80,11 +80,14 @@ func compose_row{range_check_ptr}(
 
 func compose_loop{range_check_ptr}(
     result_ptr: felt*,
+    prev_result_ptr: felt*,
     n: felt,
     composer: DeepComposer,
     queried_trace_states: Table,
     ood_frame: EvaluationFrame,
     cc_offset: felt,
+    inner_loop_len: felt,
+    add_to_previous_result: felt,
 ) -> () {
     alloc_locals;
 
@@ -100,7 +103,7 @@ func compose_loop{range_check_ptr}(
     tempvar x_coord_ptr = composer.x_coordinates + offset;
 
     let (sum_curr, sum_next) = compose_row(
-        row_ptr + (offset * n_cols), 0, ood_frame, composer, 0, 0, 72, cc_offset
+        row_ptr + (offset * n_cols), 0, ood_frame, composer, 0, 0, inner_loop_len, cc_offset
     );
 
     tempvar x = [x_coord_ptr];
@@ -108,12 +111,29 @@ func compose_loop{range_check_ptr}(
     let x_z_next = sub_g(x, z_next);
     let s_curr = div_g(sum_curr, x_z_curr);
     let s_next = div_g(sum_next, x_z_next);
-    tempvar sum = add_g(s_curr, s_next);
-    %{ print("sum:", ids.n, ids.sum) %}
-    assert [result_ptr] = sum;
+    let sum = add_g(s_curr, s_next);
+
+    local to_add;
+    if (add_to_previous_result == 1) {
+        let prev_sum = [prev_result_ptr];
+        to_add = prev_sum;
+    } else {
+        to_add = 0;
+    }
+
+    let sum_new = add_g(sum, to_add);
+    assert [result_ptr] = sum_new;
 
     return compose_loop(
-        result_ptr + 1, n - 1, composer, queried_trace_states, ood_frame, cc_offset
+        result_ptr + 1,
+        prev_result_ptr + 1,
+        n - 1,
+        composer,
+        queried_trace_states,
+        ood_frame,
+        cc_offset,
+        inner_loop_len,
+        add_to_previous_result,
     );
 }
 
@@ -133,61 +153,44 @@ func compose_trace_columns{range_check_ptr}(
     let z_next = composer.z_next;
 
     // Compose columns of the main segment
+    let (local mock_prev_result: felt*) = alloc();
     let (local result: felt*) = alloc();
     // TODO HARDCODE: Don't hardcode the number of query and columns
     tempvar n = 27;
     tempvar result_ptr = result;
+    tempvar mock_prev_results_ptr = mock_prev_result;
 
-    compose_loop(result_ptr, n, composer, queried_main_trace_states, ood_main_frame, 0);
+    // TODO HARDCODE do not hardcode inner loop len
+    compose_loop(
+        result_ptr,
+        mock_prev_results_ptr,
+        n,
+        composer,
+        queried_main_trace_states,
+        ood_main_frame,
+        0,
+        72,
+        0,
+    );
 
     // // Aux trace coefficient rows
-    // let n_cols = queried_aux_trace_states.n_cols;
+    let n_cols = queried_aux_trace_states.n_cols;
 
-    // // Compose columns of the aux segments
-    // let row = queried_aux_trace_states.elements;
-    // tempvar n = 27;  // TODO HARDCODE: double-check this value!
-    // tempvar row_ptr = row;
-    // tempvar x_coord_ptr = composer.x_coordinates;
-    // tempvar result_ptr = result_ptr;
+    let z_curr = composer.z_curr;
+    let z_next = composer.z_next;
 
-    // loop_aux:
-    // tempvar sum_curr = 0;
-    // tempvar sum_next = 0;
+    // Compose columns of the main segment
+    let (local with_aux_result: felt*) = alloc();
+    // TODO HARDCODE: Don't hardcode the number of query and columns
+    tempvar n = 27;
+    tempvar result_ptr = with_aux_result;
+    tempvar prev_result_ptr = result;
 
-    // let cc_offset = queried_main_trace_states.n_cols;
-    // tempvar i = 0;
-
-    // inner_aux:
-    // let row_cell = [row_ptr + i];
-    // let aux_frame_curr = ood_aux_frame.current[i];
-    // let curr = sub_g(row_cell, aux_frame_curr);
-    // tempvar mul_curr = mul_g(curr, composer.cc.trace[i + cc_offset].values[0]);
-    // tempvar sum_curr = add_g(sum_curr, mul_curr);
-
-    // tempvar aux_frame_next = ood_aux_frame.next[i];
-    // let next = sub_g(row_cell, aux_frame_next);
-    // tempvar mul_next = mul_g(next, composer.cc.trace[i + cc_offset].values[1]);
-    // tempvar sum_next = add_g(sum_next, mul_next);
-
-    // tempvar i = i + 1;
-    // tempvar iter_left = 27 - i;
-    // jmp inner_main if iter_left != 0;
-
-    // tempvar x = [x_coord_ptr];
-    // let x_z_curr = mul_g(x, z_curr);
-    // let x_z_next = mul_g(x, z_next);
-    // let s_curr = div_g(sum_curr, x_z_curr);
-    // let s_next = div_g(sum_next, x_z_next);
-    // tempvar sum = add_g(s_curr, s_next);
-    // assert [result_ptr] = sum;
-
-    // tempvar n = n - 1;
-    // tempvar row_ptr = row_ptr + n_cols;
-    // tempvar x_coord_ptr = x_coord_ptr + 1;
-    // tempvar result_ptr = result_ptr + 1;
-    // jmp loop_aux if n != 0;
-
-    return result;
+    // TODO HARDCODE do not hardcode inner loop len
+    compose_loop(
+        result_ptr, prev_result_ptr, n, composer, queried_aux_trace_states, ood_aux_frame, 72, 9, 1
+    );
+    return with_aux_result;
 }
 
 func compose_constraint_evaluations{range_check_ptr}(
