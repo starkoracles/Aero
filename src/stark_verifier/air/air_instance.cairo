@@ -92,11 +92,11 @@ func air_instance_new{
 
     // TODO: Make configurable for other VMs and custom AIRs
     let res = AirInstance(
-        main_segment_width=34,
-        aux_trace_width=18,
+        main_segment_width=72,
+        aux_trace_width=9,
         aux_segment_widths=aux_segment_widths,
         aux_segment_rands=aux_segment_rands,
-        num_aux_segments=2,
+        num_aux_segments=1,
         options=options,
         context=proof.context,
         num_transition_constraints=49,
@@ -148,8 +148,8 @@ func get_deep_composition_coefficients{
 
     let (t_coefficients: TraceCoefficients*) = alloc();
     set_trace_coefficients(
-        n_vec= air.main_segment_width + air.aux_trace_width,
-        n_coefficients=air.context.trace_layout.main_segment_width, // TODO: Why +1 ???
+        n_vec= air.context.trace_layout.main_segment_width + air.aux_trace_width,
+        n_coefficients=3, // TODO: Why is 3 hardcoded?
         coefficients=t_coefficients,
     );
 

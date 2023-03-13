@@ -242,13 +242,13 @@ func perform_verification{
         coeffs = [memory[ids.composer.x_coordinates + i] for i in range(0, 27)]
         print("deep", coeffs, ids.composer.z_curr, ids.composer.z_next)
     %}
-    // let t_composition = compose_trace_columns(
-    //     composer,
-    //     queried_main_trace_states,
-    //     queried_aux_trace_states,
-    //     ood_main_trace_frame,
-    //     ood_aux_trace_frame,
-    // );
+    let t_composition = compose_trace_columns(
+        composer,
+        queried_main_trace_states,
+        queried_aux_trace_states,
+        ood_main_trace_frame,
+        ood_aux_trace_frame,
+    );
     // let c_composition = compose_constraint_evaluations(
     //     composer, queried_constraint_evaluations, ood_constraint_evaluations
     // );
