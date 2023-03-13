@@ -1,9 +1,9 @@
 %lang starknet
 
-from utils.math_goldilocks import sub_g, PG, add_g, mul_g, inv_g
+from utils.math_goldilocks import sub_g, PG, add_g, mul_g, inv_g, pow_g
 
 @external
-func test_sub_goldilocks{range_check_ptr}() {
+func test_sub_g{range_check_ptr}() {
     let res = sub_g(2, 1);
     assert res = 1;
 
@@ -14,7 +14,7 @@ func test_sub_goldilocks{range_check_ptr}() {
 }
 
 @external
-func test_add_goldilocks{range_check_ptr}() {
+func test_add_g{range_check_ptr}() {
     let res = add_g(2, 1);
     assert res = 3;
 
@@ -50,6 +50,26 @@ func test_inv_g{range_check_ptr}() {
     let l4 = inv_g(l3);
 
     assert mul_g(l3, l4) = 1;
+
+    return ();
+}
+
+@external
+func test_pow_g{range_check_ptr}() {
+    let b1 = 5;
+    let e1 = 3;
+
+    let r1 = pow_g(b1, e1);
+
+    assert r1 = 125;
+
+    let b2 = PG - 5;
+    let e2 = 2;
+
+    let r2 = pow_g(b2, e2);
+    let expected = mul_g(b2, b2);
+
+    assert r2 = expected;
 
     return ();
 }
