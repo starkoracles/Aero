@@ -274,36 +274,43 @@ func compose_constraint_evaluations{range_check_ptr}(
     return result;
 }
 
-func combine_compositions(
+func combine_compositions_loop{range_check_ptr}(
+    composer: DeepComposer,
+    t_composition: felt*,
+    c_composition: felt*,
+    results_ptr: felt*,
+    idx: felt,
+    iterations: felt,
+) -> () {
+    alloc_locals;
+    if (idx == iterations) {
+        return ();
+    }
+
+    let t = t_composition[idx];
+    let c = c_composition[idx];
+    let composition = add_g(t, c);
+
+    let degree_1_x = mul_g(composer.x_coordinates[idx], composer.cc.degree[1]);
+    let degree_0_1_x = add_g(composer.cc.degree[0], degree_1_x);
+    let composition = mul_g(composition, degree_0_1_x);
+    assert [results_ptr] = composition;
+
+    return combine_compositions_loop(
+        composer, t_composition, c_composition, results_ptr + 1, idx + 1, iterations
+    );
+}
+
+func combine_compositions{range_check_ptr}(
     composer: DeepComposer, t_composition: felt*, c_composition: felt*
 ) -> felt* {
     alloc_locals;
 
-    let cc_degree_0 = composer.cc.degree[0];
-    let cc_degree_1 = composer.cc.degree[1];
-
     let (local result: felt*) = alloc();
-    // TODO: Don't hardcode number of queries
-    tempvar n = 54;
-    tempvar t_ptr = t_composition;
-    tempvar c_ptr = c_composition;
-    tempvar x_coord_ptr = composer.x_coordinates;
-    tempvar result_ptr = result;
+    // TODO HARDCODE: Don't hardcode number of queries
+    tempvar n = 27;
 
-    loop:
-    tempvar x = [x_coord_ptr];
-    tempvar t = [t_ptr];
-    tempvar c = [c_ptr];
-    tempvar composition = t + c;
-    tempvar composition = composition * (cc_degree_0 + x * cc_degree_1);
-    assert [result_ptr] = composition;
-
-    tempvar n = n - 1;
-    tempvar t_ptr = t_ptr + 1;
-    tempvar c_ptr = c_ptr + 1;
-    tempvar x_coord_ptr = x_coord_ptr + 1;
-    tempvar result_ptr = result_ptr + 1;
-    jmp loop if n != 0;
+    combine_compositions_loop(composer, t_composition, c_composition, result, 0, n);
 
     return result;
 }
