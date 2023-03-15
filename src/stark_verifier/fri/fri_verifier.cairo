@@ -157,7 +157,7 @@ func verify_fri_merkle_proofs{range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: 
         return ();
     }
 
-    // let digest = hash_elements(n_elements=n_evaluations, elements=evaluations);    // TODO: hash the evaluation correctly
+    // let digest = hash_elements(n_elements=n_evaluations, elements=evaluations);  // TODO: hash the evaluation correctly
     // assert_hashes_equal(digest, proofs[0].digests);
 
     verify_merkle_proof(proofs[0].length, proofs[0].digests, positions[0], trace_roots);
@@ -174,11 +174,11 @@ func verify_fri_merkle_proofs{range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: 
 
 func verify_fri_proofs{
     range_check_ptr, blake2s_ptr: felt*, channel: Channel, bitwise_ptr: BitwiseBuiltin*
-}(evaluations: felt*, positions: felt*) {
+}(evaluations: felt*, positions: felt*, fri_verifier: FriVerifier) {
     alloc_locals;
 
     let (local next_positions: felt*) = alloc();
-    let new_len = fold_positions(positions, next_positions, 54, 0);
+    let new_len = fold_positions(positions, next_positions, 27, 0, fri_verifier);
 
     let (local fri_queries_proof_ptr: QueriesProofs*) = alloc();
     %{
@@ -192,9 +192,11 @@ func verify_fri_proofs{
 
         positions = json.dumps( positions )
 
+        print("cmd to run: ", 'bin/stark_parser', 'proofs/fib.bin', 'fri-queries', positions)
+
         completed_process = subprocess.run([
             'bin/stark_parser',
-            'tests/integration/stark_proofs/fibonacci.bin', # TODO: this path shouldn't be hardcoded here!
+            'proofs/fib.bin', # TODO: this path shouldn't be hardcoded here!
             'fri-queries',
             positions
             ],
@@ -219,7 +221,9 @@ func verify_fri_proofs{
     return ();
 }
 
-func fold_positions(positions: felt*, next_positions: felt*, loop_counter, elems_count) -> felt {
+func fold_positions(
+    positions: felt*, next_positions: felt*, loop_counter, elems_count, fri_verifier: FriVerifier
+) -> felt {
     if (loop_counter == 0) {
         return elems_count;
     }
@@ -228,24 +232,28 @@ func fold_positions(positions: felt*, next_positions: felt*, loop_counter, elems
     local next_position;
     // TODO: this hint is an insecure hack. Replace it
     %{
-        domain_size = 512
-        fri_folding_factor = 8
+        domain_size = ids.fri_verifier.domain_size
+        fri_folding_factor = ids.fri_verifier.options.folding_factor
         modulus = domain_size // fri_folding_factor
         ids.next_position = ids.prev_position % modulus
     %}
     let is_contained = contains(next_position, next_positions - elems_count, elems_count);
     if (is_contained == 1) {
-        return fold_positions(positions + 1, next_positions, loop_counter - 1, elems_count);
+        return fold_positions(
+            positions + 1, next_positions, loop_counter - 1, elems_count, fri_verifier
+        );
     } else {
         assert next_positions[0] = next_position;
-        return fold_positions(positions + 1, next_positions + 1, loop_counter - 1, elems_count + 1);
+        return fold_positions(
+            positions + 1, next_positions + 1, loop_counter - 1, elems_count + 1, fri_verifier
+        );
     }
 }
 
 func fri_verify{
     range_check_ptr, blake2s_ptr: felt*, channel: Channel, bitwise_ptr: BitwiseBuiltin*
 }(fri_verifier: FriVerifier, evaluations: felt*, positions: felt*) {
-    verify_fri_proofs(evaluations, positions);
+    verify_fri_proofs(evaluations, positions, fri_verifier);
     // TODO
     return ();
 }

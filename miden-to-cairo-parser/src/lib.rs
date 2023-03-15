@@ -399,12 +399,10 @@ impl WriteableWith<FriProofParams<'_>> for FriProof {
             .clone()
             .parse_layers::<Blake2s_256<Felt>, Felt>(air.lde_domain_size(), folding_factor)
             .unwrap();
-        for proof in proofs {
-            let paths = proof.into_paths(&params.indexes).unwrap(); // TODO: fold the indexes here
-            let mut child_target = target.alloc();
-            for path in paths {
-                child_target.write_sized_array(path);
-            }
+        let paths = proofs[0].into_paths(&params.indexes).unwrap(); // TODO: support multiple layers
+        let mut child_target = target.alloc();
+        for path in paths {
+            child_target.write_sized_array(path);
         }
     }
 }

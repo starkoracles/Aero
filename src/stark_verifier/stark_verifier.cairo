@@ -254,11 +254,11 @@ func perform_verification{
     );
     let deep_evaluations = combine_compositions(composer, t_composition, c_composition);
 
-    // // 7 ----- Verify low-degree proof -------------------------------------------------------------
+    // 7 ----- Verify low-degree proof -------------------------------------------------------------
 
-    // // Make sure that evaluations of the DEEP composition polynomial we computed in the previous
-    // // step are in fact evaluations of a polynomial of degree equal to trace polynomial degree.
-    // fri_verify(fri_verifier, deep_evaluations, query_positions);
+    // Make sure that evaluations of the DEEP composition polynomial we computed in the previous
+    // step are in fact evaluations of a polynomial of degree equal to trace polynomial degree.
+    fri_verify(fri_verifier, deep_evaluations, query_positions);
 
     return ();
 }
