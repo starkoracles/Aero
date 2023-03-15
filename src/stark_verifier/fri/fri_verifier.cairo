@@ -9,6 +9,7 @@ from starkware.cairo.common.pow import pow
 from utils.pow2 import pow2
 from stark_verifier.channel import verify_merkle_proof, QueriesProofs, QueriesProof
 from stark_verifier.crypto.random import contains
+from utils.math_goldilocks import mul_g, sub_g, add_g, div_g, pow_g
 
 struct FriOptions {
     folding_factor: felt,
@@ -18,8 +19,8 @@ struct FriOptions {
 
 func to_fri_options(proof_options: ProofOptions) -> FriOptions {
     let folding_factor = proof_options.fri_folding_factor;
-    let max_remainder_size = proof_options.fri_max_remainder_size; // stored as power of 2
-    let fri_options = FriOptions(proof_options.blowup_factor, folding_factor, max_remainder_size);
+    let max_remainder_size = proof_options.fri_max_remainder_size;  // stored as power of 2
+    let fri_options = FriOptions(folding_factor, max_remainder_size, proof_options.blowup_factor);
     return fri_options;
 }
 
@@ -34,11 +35,14 @@ struct FriVerifier {
 }
 
 func _fri_verifier_new{
-    range_check_ptr,
-    blake2s_ptr: felt*,
-    bitwise_ptr: BitwiseBuiltin*,
-    public_coin: PublicCoin,
-}(options: FriOptions, max_degree_plus_1, layer_commitment_ptr: felt*, layer_alpha_ptr: felt*, count) {
+    range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuiltin*, public_coin: PublicCoin
+}(
+    options: FriOptions,
+    max_degree_plus_1,
+    layer_commitment_ptr: felt*,
+    layer_alpha_ptr: felt*,
+    count,
+) {
     if (count == 0) {
         return ();
     }
@@ -48,8 +52,13 @@ func _fri_verifier_new{
     let alpha = draw();
     assert [layer_alpha_ptr] = alpha;
 
-
-    _fri_verifier_new(options, max_degree_plus_1 / options.folding_factor, layer_commitment_ptr + 8, layer_alpha_ptr + 1, count - 1);
+    _fri_verifier_new(
+        options,
+        max_degree_plus_1 / options.folding_factor,
+        layer_commitment_ptr + 8,
+        layer_alpha_ptr + 1,
+        count - 1,
+    );
     return ();
 }
 
@@ -58,12 +67,12 @@ func fri_verifier_new{
     blake2s_ptr: felt*,
     bitwise_ptr: BitwiseBuiltin*,
     public_coin: PublicCoin,
-    channel: Channel
+    channel: Channel,
 }(options: FriOptions, max_poly_degree) -> FriVerifier {
-
     alloc_locals;
 
     let _next_power_of_two = next_power_of_two(max_poly_degree);
+    // using normal mul since it should not overflow
     let domain_size = _next_power_of_two * options.blowup_factor;
 
     let domain_size_log2 = log2(domain_size);
@@ -77,8 +86,9 @@ func fri_verifier_new{
     // read layer commitments from the channel and use them to build a list of alphas
     let (layer_alphas) = alloc();
     let layer_commitments = channel.fri_roots;
-    %{ print('fri_roots_len', ids.channel.fri_roots_len) %}
-    _fri_verifier_new(options, max_poly_degree + 1, layer_commitments, layer_alphas, channel.fri_roots_len);
+    _fri_verifier_new(
+        options, max_poly_degree + 1, layer_commitments, layer_alphas, channel.fri_roots_len
+    );
 
     let res = FriVerifier(
         max_poly_degree,
@@ -87,20 +97,20 @@ func fri_verifier_new{
         layer_commitments,
         layer_alphas,
         options,
-        num_partitions
+        num_partitions,
     );
     return res;
 }
 
 func next_power_of_two{range_check_ptr}(x) -> felt {
+    // leaving regular cairo field math since it shouldn't overflow or underflow
+    // is this secure?
     alloc_locals;
     local n_bits;
-    %{
-        ids.n_bits = len( bin(ids.x - 1).replace('0b', '') )
-    %}
+    %{ ids.n_bits = len( bin(ids.x - 1).replace('0b', '') ) %}
     let next_power_of_two = pow2(n_bits);
     local next_power_of_two = next_power_of_two;
-    local x2_1 = x*2-1;
+    local x2_1 = x * 2 - 1;
     with_attr error_message("{x} <= {next_power_of_two} <= {x2_1}") {
         assert_le(x, next_power_of_two);
         assert_le(next_power_of_two, x * 2 - 1);
@@ -108,8 +118,8 @@ func next_power_of_two{range_check_ptr}(x) -> felt {
     return next_power_of_two;
 }
 
-const TWO_ADICITY = 192;
-const TWO_ADIC_ROOT_OF_UNITY = 145784604816374866144131285430889962727208297722245411306711449302875041684;
+const TWO_ADICITY = 32;
+const TWO_ADIC_ROOT_OF_UNITY = 1753635133440165772;
 
 func get_root_of_unity{range_check_ptr}(n) -> felt {
     with_attr error_message("cannot get root of unity for n = 0") {
@@ -118,17 +128,16 @@ func get_root_of_unity{range_check_ptr}(n) -> felt {
     with_attr error_message("order cannot exceed 2^{TWO_ADICITY}") {
         assert_le(n, TWO_ADICITY);
     }
-    let power = pow2(TWO_ADICITY - n);
-    let (root_of_unity) = pow(TWO_ADIC_ROOT_OF_UNITY, power);
+    let base = sub_g(TWO_ADICITY, n);
+    let power = pow_g(2, base);
+    let root_of_unity = pow_g(TWO_ADIC_ROOT_OF_UNITY, power);
     return root_of_unity;
 }
 
 func log2(n) -> felt {
     alloc_locals;
     local n_bits;
-    %{
-        ids.n_bits = len( bin(ids.n - 1).replace('0b', '') )
-    %}
+    %{ ids.n_bits = len( bin(ids.n - 1).replace('0b', '') ) %}
     let next_power_of_two = pow2(n_bits);
     with_attr error_message("n must be a power of two") {
         assert next_power_of_two = n;
@@ -136,25 +145,36 @@ func log2(n) -> felt {
     return n_bits;
 }
 
-
-func verify_fri_merkle_proofs {
-    range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuiltin*
-}(proofs: QueriesProof*, positions: felt*, trace_roots: felt*, loop_counter, evaluations: felt*, n_evaluations: felt){
-    if(loop_counter == 0){
+func verify_fri_merkle_proofs{range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuiltin*}(
+    proofs: QueriesProof*,
+    positions: felt*,
+    trace_roots: felt*,
+    loop_counter,
+    evaluations: felt*,
+    n_evaluations: felt,
+) {
+    if (loop_counter == 0) {
         return ();
     }
 
     // let digest = hash_elements(n_elements=n_evaluations, elements=evaluations);    // TODO: hash the evaluation correctly
     // assert_hashes_equal(digest, proofs[0].digests);
 
-    verify_merkle_proof( proofs[0].length, proofs[0].digests, positions[0], trace_roots );
-    verify_fri_merkle_proofs(&proofs[1], positions + 1, trace_roots, loop_counter - 1, evaluations + n_evaluations, n_evaluations);
+    verify_merkle_proof(proofs[0].length, proofs[0].digests, positions[0], trace_roots);
+    verify_fri_merkle_proofs(
+        &proofs[1],
+        positions + 1,
+        trace_roots,
+        loop_counter - 1,
+        evaluations + n_evaluations,
+        n_evaluations,
+    );
     return ();
 }
 
-func verify_fri_proofs {
+func verify_fri_proofs{
     range_check_ptr, blake2s_ptr: felt*, channel: Channel, bitwise_ptr: BitwiseBuiltin*
-    }(evaluations: felt*, positions: felt*){
+}(evaluations: felt*, positions: felt*) {
     alloc_locals;
 
     let (local next_positions: felt*) = alloc();
@@ -179,36 +199,42 @@ func verify_fri_proofs {
             positions
             ],
             capture_output=True)
-        
+
         json_data = completed_process.stdout
         write_into_memory(ids.fri_queries_proof_ptr, json_data, segments)
     %}
     let n_cols = 1;
-    
+
     // Authenticate proof paths
     // TODO: loop folding here
     verify_fri_merkle_proofs(
-        fri_queries_proof_ptr[0].proofs, next_positions, channel.fri_roots, new_len, evaluations, n_cols);
-    
-    return();
+        fri_queries_proof_ptr[0].proofs,
+        next_positions,
+        channel.fri_roots,
+        new_len,
+        evaluations,
+        n_cols,
+    );
+
+    return ();
 }
 
 func fold_positions(positions: felt*, next_positions: felt*, loop_counter, elems_count) -> felt {
-    if (loop_counter == 0){
+    if (loop_counter == 0) {
         return elems_count;
     }
     alloc_locals;
     let prev_position = [positions];
     local next_position;
     // TODO: this hint is an insecure hack. Replace it
-    %{ 
+    %{
         domain_size = 512
         fri_folding_factor = 8
         modulus = domain_size // fri_folding_factor
         ids.next_position = ids.prev_position % modulus
     %}
     let is_contained = contains(next_position, next_positions - elems_count, elems_count);
-    if(is_contained == 1){
+    if (is_contained == 1) {
         return fold_positions(positions + 1, next_positions, loop_counter - 1, elems_count);
     } else {
         assert next_positions[0] = next_position;
@@ -217,9 +243,8 @@ func fold_positions(positions: felt*, next_positions: felt*, loop_counter, elems
 }
 
 func fri_verify{
-    range_check_ptr, blake2s_ptr: felt*, channel: Channel, bitwise_ptr: BitwiseBuiltin*}(
-    fri_verifier: FriVerifier, evaluations: felt*, positions: felt*
-) {
+    range_check_ptr, blake2s_ptr: felt*, channel: Channel, bitwise_ptr: BitwiseBuiltin*
+}(fri_verifier: FriVerifier, evaluations: felt*, positions: felt*) {
     verify_fri_proofs(evaluations, positions);
     // TODO
     return ();

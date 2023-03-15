@@ -88,7 +88,7 @@ func air_instance_new{
         log_lde_domain_size = ids.options.log_blowup_factor + ids.proof.context.log_trace_length
         power = pow(2, TWO_ADICITY - log_lde_domain_size, PG)
         ids.lde_domain_generator = pow(G, power, PG)
-        print("blow_up", ids.proof.context.options.blowup_factor)
+        print("blowup_factor", ids.options.blowup_factor)
     %}
 
     // TODO: Make configurable for other VMs and custom AIRs
@@ -102,7 +102,7 @@ func air_instance_new{
         context=proof.context,
         num_transition_constraints=49,
         num_assertions=7,
-        ce_blowup_factor=proof.context.options.blowup_factor,
+        ce_blowup_factor=options.blowup_factor,
         // eval_frame_size=2,
         trace_domain_generator=trace_domain_generator,
         lde_domain_generator=lde_domain_generator,
