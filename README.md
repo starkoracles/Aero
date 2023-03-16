@@ -37,11 +37,17 @@ make integration_test
 
 ## Roadmap
 
-* Add FRI verification
-* Resolve code TODO - Trace queries 4 -> 54
-* Add AIR verification
-* Enable extension field for security 
+* Add FRI remainder verification
+* Add AIR verification - Use AirScript to generate constraints in Cairo
+* Enable extension field for security
+* Eliminate hard-coded parameters 
 * Deploy on Starknet
+
+## Changelog
+* Modify ZeroSync to match Miden's trace layout
+* Change all field operations to goldilocks (this can be configured to be any field smaller than Cairo's field)
+* Change Winterfell to work with blake2s (match Cairo's implementation)
+* Remove ZeroSync dependencies that require Python<>Rust integration
 
 ## Acknowledgements
 
