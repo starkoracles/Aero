@@ -235,7 +235,6 @@ func assign_folding_roots_loop{range_check_ptr}(
     }
 
     let r = mul_g(folding_roots[idx - 1], xe);
-    %{ print(f"i: {ids.idx}, r: {ids.r}") %}
     assert x_values[idx - 1] = r;
 
     return assign_folding_roots_loop(idx - 1, folding_roots, xe, x_values);
@@ -245,7 +244,7 @@ func verify_layers{range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuil
     omega: felt,
     alphas: felt*,
     position: felt,
-    query_evaluations: felt*,
+    evaluations: felt*,
     num_layer_evaluations: felt,
     num_layers: felt,
     previous_eval: felt,
@@ -258,7 +257,6 @@ func verify_layers{range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuil
     folding_roots: felt*,
     remainders: Vec*,
 ) {
-    %{ print(f"num_layers: {ids.num_layers}") %}
     alloc_locals;
     if (num_layers == 0) {
         // Check that the claimed remainder is equal to the final evaluation.
@@ -267,7 +265,7 @@ func verify_layers{range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuil
         return ();
     }
 
-    let (_, folded_position) = unsigned_div_rem(position, modulus);
+    let (local query_position, folded_position) = unsigned_div_rem(position, modulus);
 
     // Check if we have already verified this folded_position
     local index: felt;
@@ -298,13 +296,12 @@ func verify_layers{range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuil
     verify_merkle_proof(query_proof.length, query_proof.path, folded_position, layer_commitments);
     let leaf_hash = hash_elements(n_elements=FOLDING_FACTOR, elements=query_proof.values);
     assert_hashes_equal(leaf_hash, query_proof.path);
-    let is_contained = contains(query_evaluations[0], query_proof.values, FOLDING_FACTOR);
+    let is_contained = contains(evaluations[0], query_proof.values, FOLDING_FACTOR);
     assert_not_zero(is_contained);
 
-    // TODO: Compare previous polynomial evaluation with the current layer evaluation
-    // if (previous_eval != 0) {
-    //     assert previous_eval = query_evaluations[1];
-    // }
+    // Compare poly evaluations to the query proof
+    let query_value = query_proof.values[query_position];
+    assert query_value = evaluations[0];
 
     // Interpolate the evaluations at the x-coordinates, and evaluate at alpha.
     let alpha = [alphas];
@@ -321,14 +318,14 @@ func verify_layers{range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuil
     // Update variables for the next layer
     let omega = pow_g(omega, FOLDING_FACTOR);
     let modulus = modulus / FOLDING_FACTOR;
-    let (query_evaluations) = alloc();
-    assert query_evaluations[0] = previous_eval;
+    let (evaluations) = alloc();
+    assert evaluations[0] = previous_eval;
 
     return verify_layers(
         omega,
         alphas + 1,
         folded_position,
-        query_evaluations,
+        evaluations,
         num_layer_evaluations,
         num_layers - 1,
         previous_eval,
@@ -348,7 +345,7 @@ func verify_queries{
 }(
     fri_verifier: FriVerifier*,
     positions: felt*,
-    query_evaluations: felt*,
+    evaluations: felt*,
     num_queries: felt,
     fri_proofs: FriQueryProof**,
     num_layers: felt,
@@ -357,20 +354,17 @@ func verify_queries{
     folding_roots: felt*,
     remainders: Vec*,
 ) {
-    %{ print(f"num_queries: {ids.num_queries}") %}
     if (num_queries == 0) {
         return ();
     }
     alloc_locals;
-
-    %{ print(f"num_queries: {ids.num_queries}") %}
 
     // Iterate over the layers within this query
     verify_layers(
         omega=fri_verifier.domain_generator,
         alphas=fri_verifier.layer_alphas,
         position=[positions],
-        query_evaluations=query_evaluations,
+        evaluations=evaluations,
         num_layer_evaluations=FOLDING_FACTOR * num_layers,
         num_layers=num_layers,
         previous_eval=0,
@@ -388,7 +382,7 @@ func verify_queries{
     verify_queries(
         fri_verifier,
         &positions[1],
-        &query_evaluations[1],
+        &evaluations[1],
         num_queries - 1,
         fri_proofs,
         num_layers,
