@@ -1,10 +1,11 @@
-use miden_air::StarkField;
+use hex::FromHex;
 use miden_to_cairo_parser::{
     memory::{Writeable, WriteableWith},
     Air, BinaryProofData, Felt, FriProofParams, ProcessorAir, PublicInputs, StarkProof,
 };
 use serde_json::from_str;
 use winter_crypto::hashers::Blake2s_256;
+use winter_math::polynom::interpolate;
 use winter_utils::{Deserializable, SliceReader};
 use winterfell::VerifierChannel;
 
@@ -23,9 +24,19 @@ struct Cli {
 enum Commands {
     Proof,
     PublicInputs,
-    TraceQueries { indexes: Option<String> },
-    ConstraintQueries { indexes: Option<String> },
-    FriQueries { indexes: Option<String> },
+    TraceQueries {
+        indexes: Option<String>,
+    },
+    ConstraintQueries {
+        indexes: Option<String>,
+    },
+    FriQueries {
+        indexes: Option<String>,
+    },
+    InterpolatePoly {
+        x_values: Option<String>,
+        y_values: Option<String>,
+    },
 }
 
 fn main() {
@@ -88,7 +99,27 @@ fn main() {
                 indexes: &indexes,
             })
         }
+        Commands::InterpolatePoly { x_values, y_values } => {
+            let x_values = decode_felt_array(x_values);
+            let y_values = decode_felt_array(y_values);
+
+            let poly = interpolate(&x_values, &y_values, false);
+            poly.iter()
+                .fold(String::new(), |a, x| a + ", " + &x.to_string())
+        }
     };
 
     println!("{}", json_arr);
+}
+
+fn decode_felt_array(values: &Option<String>) -> Vec<Felt> {
+    let values: Vec<String> = from_str(&values.clone().unwrap()).unwrap();
+    values
+        .into_iter()
+        .map(|value| {
+            let decoded = <[u8; 8]>::from_hex(value).unwrap();
+            let d = u64::from_le_bytes(decoded);
+            Felt::new(d)
+        })
+        .collect()
 }

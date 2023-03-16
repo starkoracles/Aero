@@ -14,7 +14,7 @@ from stark_verifier.air.air_instance import AirInstance
 from stark_verifier.air.table import Table
 from stark_verifier.air.transitions.frame import EvaluationFrame
 from stark_verifier.utils import Vec
-from crypto.hash_utils import assert_hashes_equal
+from crypto.hash_utils import assert_hashes_equal, copy_hash
 from utils.endianness import byteswap32
 
 from stark_verifier.crypto.random import hash_elements
@@ -23,6 +23,11 @@ struct TraceOodFrame {
     main_frame: EvaluationFrame,
     aux_frame: EvaluationFrame,
 }
+
+// TODO remove hardcode
+const FOLDING_FACTOR = 8;
+const HASH_FELT_SIZE = 8;
+const UINT32_SIZE = 4;
 
 struct Channel {
     // Trace queries
@@ -41,6 +46,8 @@ struct Channel {
     trace_queries: TraceQueries*,
     // Queried constraint evaluations
     constraint_queries: ConstraintQueries*,
+    // Remainder
+    remainder: Vec,
 }
 
 func channel_new{bitwise_ptr: BitwiseBuiltin*}(air: AirInstance, proof: StarkProof*) -> Channel {
@@ -65,8 +72,110 @@ func channel_new{bitwise_ptr: BitwiseBuiltin*}(air: AirInstance, proof: StarkPro
         pow_nonce=proof.pow_nonce,
         trace_queries=&proof.trace_queries,
         constraint_queries=&proof.constraint_queries,
+        remainder=proof.remainder,
     );
     return channel;
+}
+
+func read_remainder{
+    range_check_ptr, channel: Channel, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuiltin*
+}() -> Vec {
+    // TODO re-enable
+    // alloc_locals;
+    // let remainder = channel.remainder.elements;
+    // let loop_counter = channel.remainder.n_elements / FOLDING_FACTOR;
+    // let (remainder_values: felt**) = alloc();
+    // transpose_slice(remainder, remainder_values, loop_counter);
+
+    // // build remainder Merkle tree
+    // let (hashed_values: felt*) = alloc();
+    // hash_values(remainder_values, hashed_values, loop_counter);
+    // let root = compute_merkle_root(hashed_values, loop_counter);
+
+    // // Compare the root to the last fri_root
+    // let expected_root = channel.fri_roots + (channel.fri_roots_len - 1) * HASH_FELT_SIZE;
+    // %{
+    //     for i in range(0, ids.HASH_FELT_SIZE):
+    //         print(f"i: {i}, root[i] = {hex(memory[ids.root + i])}, expected_root[i] = {hex(memory[ids.expected_root + i])}")
+    // %}
+    // assert_hashes_equal(root, expected_root);
+
+    return channel.remainder;
+}
+
+func transpose_slice(source: felt*, destination: felt**, loop_counter) {
+    if (loop_counter == 0) {
+        return ();
+    }
+    let (row) = alloc();
+    assert [destination] = row;
+
+    tempvar row_ptr = row;
+    tempvar src_ptr = source;
+    tempvar n = FOLDING_FACTOR;
+
+    transpose_loop:
+    assert [row_ptr] = [src_ptr];
+    tempvar row_ptr = row_ptr + 1;
+    tempvar src_ptr = src_ptr + FOLDING_FACTOR;
+    tempvar n = n - 1;
+    jmp transpose_loop if n != 0;
+
+    return transpose_slice(source + 1, destination + 1, loop_counter - 1);
+}
+
+func hash_values{range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuiltin*}(
+    values: felt**, hashes: felt*, loop_counter
+) {
+    if (loop_counter == 0) {
+        return ();
+    }
+    alloc_locals;
+    let digest = hash_elements(n_elements=FOLDING_FACTOR, elements=[values]);
+    memcpy(hashes, digest, HASH_FELT_SIZE);
+    return hash_values(values + 1, hashes + HASH_FELT_SIZE, loop_counter - 1);
+}
+
+// Compute the Merkle root hash of a set of hashes
+func compute_merkle_root{range_check_ptr, bitwise_ptr: BitwiseBuiltin*, blake2s_ptr: felt*}(
+    leaves: felt*, leaves_len: felt
+) -> felt* {
+    alloc_locals;
+
+    // The trivial case is a tree with a single leaf
+    if (leaves_len == 1) {
+        return leaves;
+    }
+
+    // Compute the next generation of leaves one level higher up in the tree
+    let (next_leaves) = alloc();
+    let next_leaves_len = (leaves_len) / 2;
+    _compute_merkle_root_loop(leaves, next_leaves, next_leaves_len);
+
+    // Ascend in the tree and recurse on the next generation one step closer to the root
+    return compute_merkle_root(next_leaves, next_leaves_len);
+}
+
+// Compute the next generation of leaves by pairwise hashing
+// the previous generation of leaves
+func _compute_merkle_root_loop{range_check_ptr, bitwise_ptr: BitwiseBuiltin*, blake2s_ptr: felt*}(
+    prev_leaves: felt*, next_leaves: felt*, loop_counter
+) {
+    alloc_locals;
+
+    // We loop until we've completed the next generation
+    if (loop_counter == 0) {
+        return ();
+    }
+
+    // Hash two prev_leaves to get one leaf of the next generation
+    let (digest) = blake2s_as_words(data=prev_leaves, n_bytes=HASH_FELT_SIZE * 2 * UINT32_SIZE);
+    copy_hash(digest, next_leaves);
+
+    // Continue this loop with the next two prev_leaves
+    return _compute_merkle_root_loop(
+        prev_leaves + HASH_FELT_SIZE * 2, next_leaves + HASH_FELT_SIZE, loop_counter - 1
+    );
 }
 
 func read_trace_commitments{channel: Channel}() -> felt* {
