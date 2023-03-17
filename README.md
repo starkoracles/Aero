@@ -37,7 +37,6 @@ make integration_test
 
 ## Roadmap
 
-* Add FRI remainder verification
 * Add AIR verification - Use AirScript to generate constraints in Cairo
 * Enable extension field for security
 * Eliminate hard-coded parameters 
