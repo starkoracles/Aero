@@ -260,8 +260,7 @@ func verify_layers{range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuil
     alloc_locals;
     if (num_layers == 0) {
         // Check that the claimed remainder is equal to the final evaluation.
-        // TODO reenable once remainders are ready
-        // assert_contains(remainders.elements, remainders.n_elements, query_evaluations[0]);
+        assert_contains(remainders.elements, remainders.n_elements, evaluations[0]);
         return ();
     }
 
@@ -452,11 +451,11 @@ func fri_verify{
 }
 
 // Ensure that a given array contains a particular element
-// func assert_contains(array: felt*, array_len, element) {
-//     alloc_locals;
-//     local index: felt;
-//     %{ ids.index = index_of(ids.array, ids.array_len, ids.element, memory) %}
-//     // TODO: Do we have to verify that `0 < index < array_len` here?
-//     assert element = array[index];
-//     return ();
-// }
+func assert_contains(array: felt*, array_len, element) {
+    alloc_locals;
+    local index: felt;
+    %{ ids.index = index_of(ids.array, ids.array_len, ids.element, memory) %}
+    // TODO: Do we have to verify that `0 < index < array_len` here?
+    assert element = array[index];
+    return ();
+}

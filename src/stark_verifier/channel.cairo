@@ -80,48 +80,44 @@ func channel_new{bitwise_ptr: BitwiseBuiltin*}(air: AirInstance, proof: StarkPro
 func read_remainder{
     range_check_ptr, channel: Channel, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuiltin*
 }() -> Vec {
-    // TODO re-enable
-    // alloc_locals;
-    // let remainder = channel.remainder.elements;
-    // let loop_counter = channel.remainder.n_elements / FOLDING_FACTOR;
-    // let (remainder_values: felt**) = alloc();
-    // transpose_slice(remainder, remainder_values, loop_counter);
+    alloc_locals;
+    let remainder = channel.remainder.elements;
+    let loop_counter = channel.remainder.n_elements / FOLDING_FACTOR;
+    let num_of_layers = loop_counter / FOLDING_FACTOR;
+    let (remainder_values: felt**) = alloc();
+    transpose_slice(remainder, remainder_values, loop_counter, num_of_layers);
 
-    // // build remainder Merkle tree
-    // let (hashed_values: felt*) = alloc();
-    // hash_values(remainder_values, hashed_values, loop_counter);
-    // let root = compute_merkle_root(hashed_values, loop_counter);
+    // build remainder Merkle tree
+    let (hashed_values: felt*) = alloc();
+    hash_values(remainder_values, hashed_values, loop_counter);
+    let root = compute_merkle_root(hashed_values, loop_counter);
 
-    // // Compare the root to the last fri_root
-    // let expected_root = channel.fri_roots + (channel.fri_roots_len - 1) * HASH_FELT_SIZE;
-    // %{
-    //     for i in range(0, ids.HASH_FELT_SIZE):
-    //         print(f"i: {i}, root[i] = {hex(memory[ids.root + i])}, expected_root[i] = {hex(memory[ids.expected_root + i])}")
-    // %}
-    // assert_hashes_equal(root, expected_root);
+    // Compare the root to the last fri_root
+    let expected_root = channel.fri_roots + (channel.fri_roots_len - 1) * HASH_FELT_SIZE;
+    assert_hashes_equal(root, expected_root);
 
     return channel.remainder;
 }
 
-func transpose_slice(source: felt*, destination: felt**, loop_counter) {
+func transpose_slice_loop(n: felt, row_ptr: felt*, src_ptr: felt*, num_of_layers: felt) -> () {
+    if (n == 0) {
+        return ();
+    }
+
+    let jmp_factor = FOLDING_FACTOR * num_of_layers;
+    assert [row_ptr] = [src_ptr];
+
+    return transpose_slice_loop(n - 1, row_ptr + 1, src_ptr + jmp_factor, num_of_layers);
+}
+
+func transpose_slice(source: felt*, destination: felt**, loop_counter: felt, num_of_layers: felt) {
     if (loop_counter == 0) {
         return ();
     }
     let (row) = alloc();
     assert [destination] = row;
-
-    tempvar row_ptr = row;
-    tempvar src_ptr = source;
-    tempvar n = FOLDING_FACTOR;
-
-    transpose_loop:
-    assert [row_ptr] = [src_ptr];
-    tempvar row_ptr = row_ptr + 1;
-    tempvar src_ptr = src_ptr + FOLDING_FACTOR;
-    tempvar n = n - 1;
-    jmp transpose_loop if n != 0;
-
-    return transpose_slice(source + 1, destination + 1, loop_counter - 1);
+    transpose_slice_loop(FOLDING_FACTOR, row, source, num_of_layers);
+    return transpose_slice(source + 1, destination + 1, loop_counter - 1, num_of_layers);
 }
 
 func hash_values{range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuiltin*}(
