@@ -27,7 +27,7 @@ be compiled down to WASM which allows easy integration with web applications, in
 
 ### Generate proof
 ```
-make generate-proof
+make generate_proof
 ```
 
 ### Verify in Cairo
