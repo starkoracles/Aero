@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package sdk;
+
+import "sdk-api/proto/common.proto";
+
+message TraceQueries {
+    Table main_states = 1;
+    Table aux_states = 2;
+}
+
+message ConstraintQueries {
+    Table evaluations = 1;
+}

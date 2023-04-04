@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package sdk;
+
+message FieldElement {
+    // number of bytes it takes to represent this element
+    uint32 size = 1;
+    // element le bytes
+    bytes element = 2;
+}
+
+message Table {
+    uint32 n_rows = 1;
+    uint32 n_cols = 2;
+    // stored as a single dim vector each row at a time
+    repeated FieldElement elements = 3;
+}

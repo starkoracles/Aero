@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package sdk;
+
+message Digest {
+    // size of digest
+    uint32 size = 1;
+    // digest bytes
+    bytes data = 2;
+}
+
+message Commitments {
+    repeated Digest trace_roots = 1;
+    Digest constraint_root = 2;
+    repeated Digest fri_roots = 3;
+}

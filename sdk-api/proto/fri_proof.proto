@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package sdk;
+
+import "sdk-api/proto/common.proto";
+
+message FriProofLayer {
+    bytes values = 1;
+    bytes paths = 2;
+}
+
+message FriProof {
+    // TODO - convert to prover agnostic format, now it's miden specific
+    repeated FriProofLayer layers = 1;
+    repeated FieldElement remainder = 2;
+    uint32 num_partitions =  3; // stored as power of 2
+}
