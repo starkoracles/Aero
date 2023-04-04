@@ -2,12 +2,7 @@ syntax = "proto3";
 
 package sdk;
 
-message Digest {
-    // size of digest
-    uint32 size = 1;
-    // digest bytes
-    bytes data = 2;
-}
+import "sdk-api/proto/common.proto";
 
 message Commitments {
     repeated Digest trace_roots = 1;

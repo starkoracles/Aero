@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package sdk;
+
+import "sdk-api/proto/common.proto";
+
+// We will use a WASM module as the prover, so these data types will be used to interact with it
+message MidenProgram {
+    string program = 1;
+}
+
+message MidenProgramInputs {
+    repeated FieldElement stack_init = 1;
+    repeated FieldElement advice_tape = 2;
+    // TODO do we need these?
+    // advice_map: BTreeMap<[u8; 32], Vec<Felt>>,
+    // advice_sets: BTreeMap<[u8; 32], AdviceSet>,
+}
+
+// prove(MidenProgram, MidenProgramInputs, ProofOptions) -> (MidenProgramOutputs , StarkProof)

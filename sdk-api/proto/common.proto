@@ -15,3 +15,10 @@ message Table {
     // stored as a single dim vector each row at a time
     repeated FieldElement elements = 3;
 }
+
+message Digest {
+    // size of digest
+    uint32 size = 1;
+    // digest bytes
+    bytes data = 2;
+}
