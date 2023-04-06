@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package sdk;
 
-import "sdk-api/proto/stark_proof.proto";
-import "sdk-api/proto/miden_vm.proto";
+import "stark_proof.proto";
+import "miden_vm.proto";
 
 enum TargetChain {
     STARKNET = 0;

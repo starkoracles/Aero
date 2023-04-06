@@ -2,11 +2,11 @@ syntax = "proto3";
 
 package sdk;
 
-import "sdk-api/proto/context.proto";
-import "sdk-api/proto/commitments.proto";
-import "sdk-api/proto/queries.proto";
-import "sdk-api/proto/ood_frame.proto";
-import "sdk-api/proto/fri_proof.proto";
+import "context.proto";
+import "commitments.proto";
+import "queries.proto";
+import "ood_frame.proto";
+import "fri_proof.proto";
 
 
 // A STARK proof for a computation.

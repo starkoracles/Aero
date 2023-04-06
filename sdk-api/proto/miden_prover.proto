@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package sdk;
 
-import "sdk-api/proto/common.proto";
+import "common.proto";
 
 // We will use a WASM module as the prover, so these data types will be used to interact with it
 message MidenProgram {

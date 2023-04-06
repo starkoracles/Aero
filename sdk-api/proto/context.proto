@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package sdk;
 
-import "sdk-api/proto/common.proto";
+import "common.proto";
 
 enum HashFunction {
     // we only support blake2s for now

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package sdk;
 
-import "sdk-api/proto/common.proto";
+import "common.proto";
 
 message TraceQueries {
     Table main_states = 1;

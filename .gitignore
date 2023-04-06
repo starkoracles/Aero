@@ -15,5 +15,3 @@ Cargo.lock
 /target
 
 bin/stark_parser
-
-.vscode
