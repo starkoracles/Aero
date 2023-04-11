@@ -11,6 +11,8 @@ miden-core = { version = "0.3.0", path = "../miden/core" }
 miden-stdlib = { version = "0.2.0", path = "../miden/stdlib" }
 miden-air = {version = "0.3.0", path = "../miden/air"}
 miden-verifier = {version = "0.3.0", path = "../miden/verifier"}
+winter_fri = { package = "winter-fri", path = "../winterfell/fri", version = "0.4", default-features = false }
+winter_air = { package = "winter-air", path = "../winterfell/air", version = "0.4", default-features = false }
 
 [build-dependencies]
 prost-build = {version = "0.11.8"}
