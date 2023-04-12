@@ -16,7 +16,7 @@ fn main() -> Result<()> {
             "ood_frame.proto",
             "queries.proto",
         ],
-        &["proto"],
+        &["../proto"],
     )?;
     Ok(())
 }

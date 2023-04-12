@@ -1,2 +1,2 @@
 [workspace]
-members = ["miden-proof-generator", "miden-to-cairo-parser", "sdk-api"]
+members = ["miden-proof-generator", "miden-to-cairo-parser", "sdk-api/miden-wasm"]
