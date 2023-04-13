@@ -1,3 +1,4 @@
 node_modules/*
-sdk-ts/*
 dist/*
+src/proto-ts/*
+build/*

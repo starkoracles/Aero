@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "jest",
-    "proto": "protoc --plugin=node_modules/ts-proto/protoc-gen-ts_proto proto/miden_prover.proto proto/context.proto --ts_proto_out=./src/proto-ts -Iproto",
-    "wasm-build": "cd miden-wasm && wasm-pack build --target web --out-name miden-wasm --out-dir pkg && cd ..",
-    "build": "npm run wasm-build && npm run proto && tsc"
+    "proto": "rm -rf src/proto-ts && mkdir -p src/proto-ts && protoc --plugin=node_modules/ts-proto/protoc-gen-ts_proto proto/miden_prover.proto proto/context.proto --ts_proto_out=./src/proto-ts -Iproto",
+    "build:wasm": "rm -rf node_modules/miden-wasm && cd miden-wasm && wasm-pack build --target web --out-name miden-wasm --out-dir pkg && cd .. && npm install",
+    "build": "npm run build:wasm && npm run proto && tsc"
   },
   "keywords": [
     "zkp",
@@ -23,9 +23,14 @@
   "devDependencies": {
     "@types/jest": "^29.5.0",
     "@types/node": "^18.15.11",
+    "babel-loader": "^9.1.2",
+    "html-webpack-plugin": "^5.5.0",
     "jest": "^29.5.0",
     "ts-jest": "^29.1.0",
+    "ts-loader": "^9.4.2",
     "ts-node": "^10.9.1",
-    "typescript": "^5.0.4"
+    "typescript": "^5.0.4",
+    "webpack-cli": "^5.0.1",
+    "webpack-dev-server": "^4.13.2"
   }
 }

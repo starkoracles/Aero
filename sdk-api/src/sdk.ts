@@ -15,5 +15,5 @@ export async function prove(program: MidenProgram, inputs: MidenProgramInputs, o
     let program_bytes = MidenProgram.encode(program).finish();
     let input_bytes = MidenProgramInputs.encode(inputs).finish();
     let option_bytes = ProofOptions.encode(options).finish();
-    miden_prove(program_bytes, input_bytes, option_bytes);
+    await miden_prove(program_bytes, input_bytes, option_bytes);
 }
