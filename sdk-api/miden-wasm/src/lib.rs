@@ -3,6 +3,7 @@ use miden::prove;
 use prost::Message;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
+use web_sys::console;
 
 pub mod convert;
 
@@ -20,6 +21,7 @@ pub fn miden_prove(
     log::set_logger(&DEFAULT_LOGGER).unwrap();
     log::set_max_level(log::LevelFilter::Info);
 
+    console::time_with_label("preparing_inputs");
     info!("============================================================");
     info!("Reading program and inputs");
     info!("============================================================");
@@ -36,10 +38,14 @@ pub fn miden_prove(
     info!("============================================================");
     info!("Prove program");
     info!("============================================================");
+    console::time_end_with_label("preparing_inputs");
+    console::time_with_label("prove_program");
 
     // execute program and generate proof
     let (outputs, proof) = prove(&program, &program_inputs, &proof_options.into())
         .map_err(|err| format!("Failed to prove program - {:?}", err))?;
+
+    console::time_end_with_label("prove_program");
 
     info!(
         "proof size: {:.1} KB",

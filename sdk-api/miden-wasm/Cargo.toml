@@ -15,15 +15,13 @@ miden-verifier = {version = "0.3.0", path = "../../miden/verifier", default-feat
 winter_fri = { package = "winter-fri", path = "../../winterfell/fri", version = "0.4", default-features = false }
 winter_air = { package = "winter-air", path = "../../winterfell/air", version = "0.4", default-features = false }
 log = "0.4.17"
+web-sys = { version = "0.3.61", features = ["console"] }
 
 [build-dependencies]
 prost-build = {version = "0.11.8"}
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"
-
-[profile.release]
-debug = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]
