@@ -7,16 +7,17 @@ use miden_stdlib::StdLibrary;
 
 impl Into<ProgramInputs> for MidenProgramInputs {
     fn into(self) -> ProgramInputs {
-        ProgramInputs::new(
-            &self.stack_init.iter().map(|e| e.into()).collect::<Vec<_>>()[..],
-            &self
-                .advice_tape
-                .iter()
-                .map(|e| e.into())
-                .collect::<Vec<_>>()[..],
-            vec![],
-        )
-        .expect("cannot parse miden program inputs")
+        ProgramInputs::new(&self.stack_init, &self.advice_tape, vec![])
+            .expect("cannot parse miden program inputs")
+    }
+}
+
+impl From<u64> for sdk::FieldElement {
+    fn from(value: u64) -> Self {
+        Self {
+            size: 8,
+            element: value.to_le_bytes().to_vec(),
+        }
     }
 }
 

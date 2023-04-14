@@ -2,7 +2,7 @@ import { miden_prove } from "miden-wasm";
 import { MidenProgram, MidenProgramInputs } from "./proto-ts/miden_prover";
 import { FieldExtension, HashFunction, PrimeField, ProofOptions } from "./proto-ts/context";
 
-export async function prove(program: MidenProgram, inputs: MidenProgramInputs, options: ProofOptions = ProofOptions.fromJSON({
+export function prove(program: MidenProgram, inputs: MidenProgramInputs, options: ProofOptions = ProofOptions.fromJSON({
     numQueries: 27,
     blowupFactor: 8,
     grindingFactor: 16,
@@ -15,5 +15,5 @@ export async function prove(program: MidenProgram, inputs: MidenProgramInputs, o
     let program_bytes = MidenProgram.encode(program).finish();
     let input_bytes = MidenProgramInputs.encode(inputs).finish();
     let option_bytes = ProofOptions.encode(options).finish();
-    await miden_prove(program_bytes, input_bytes, option_bytes);
+    miden_prove(program_bytes, input_bytes, option_bytes);
 }

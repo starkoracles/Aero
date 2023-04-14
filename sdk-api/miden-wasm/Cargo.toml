@@ -7,17 +7,23 @@ edition = "2021"
 prost = "0.11.8"
 wasm-bindgen = "0.2.84"
 wasm-bindgen-console-logger = "0.1.1"
-miden = { version = "0.3.0", path = "../../miden/miden" }
-miden-core = { version = "0.3.0", path = "../../miden/core" }
-miden-stdlib = { version = "0.2.0", path = "../../miden/stdlib" }
-miden-air = {version = "0.3.0", path = "../../miden/air"}
-miden-verifier = {version = "0.3.0", path = "../../miden/verifier"}
+miden = { version = "0.3.0", path = "../../miden/miden", default-features = false }
+miden-core = { version = "0.3.0", path = "../../miden/core", default-features = false }
+miden-stdlib = { version = "0.2.0", path = "../../miden/stdlib", default-features = false }
+miden-air = {version = "0.3.0", path = "../../miden/air", default-features = false}
+miden-verifier = {version = "0.3.0", path = "../../miden/verifier", default-features = false}
 winter_fri = { package = "winter-fri", path = "../../winterfell/fri", version = "0.4", default-features = false }
 winter_air = { package = "winter-air", path = "../../winterfell/air", version = "0.4", default-features = false }
 log = "0.4.17"
 
 [build-dependencies]
 prost-build = {version = "0.11.8"}
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.34"
+
+[profile.release]
+debug = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]

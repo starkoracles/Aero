@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "jest",
-    "proto": "rm -rf src/proto-ts && mkdir -p src/proto-ts && protoc --plugin=node_modules/ts-proto/protoc-gen-ts_proto proto/miden_prover.proto proto/context.proto --ts_proto_out=./src/proto-ts -Iproto",
-    "build:wasm": "rm -rf node_modules/miden-wasm && cd miden-wasm && wasm-pack build --target web --out-name miden-wasm --out-dir pkg && cd .. && npm install",
-    "build": "npm run build:wasm && npm run proto && tsc"
+    "build:proto": "rm -rf src/proto-ts && mkdir -p src/proto-ts && protoc --plugin=node_modules/ts-proto/protoc-gen-ts_proto proto/miden_prover.proto proto/context.proto --ts_proto_out=./src/proto-ts -Iproto",
+    "build:wasm": "rm -rf node_modules/miden-wasm && cd miden-wasm && wasm-pack build --debug --target web --out-name miden-wasm --out-dir pkg && cd .. && npm install",
+    "build": "npm run build:wasm && npm run build:proto && tsc"
   },
   "keywords": [
     "zkp",
