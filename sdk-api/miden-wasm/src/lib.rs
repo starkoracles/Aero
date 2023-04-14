@@ -21,7 +21,7 @@ pub fn miden_prove(
     log::set_max_level(log::LevelFilter::Info);
 
     info!("============================================================");
-    info!("Reading inputs");
+    info!("Reading program and inputs");
     info!("============================================================");
 
     let miden_program = MidenProgram::decode(&program[..]).expect("Cannot decode miden program");

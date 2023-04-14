@@ -4,7 +4,7 @@ import { MidenProgram, MidenProgramInputs } from "../proto-ts/miden_prover";
 
 async function onPageLoad() {
     const proofPromise = runProof();
-    document.querySelector("body").innerHTML = `<h1>Hello World!</h1>`;
+    document.querySelector("body").innerHTML = `<h1>Proving the 10th fib number!</h1>`;
     console.log("Hello!");
 
     await proofPromise;
