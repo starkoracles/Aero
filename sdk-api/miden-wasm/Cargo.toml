@@ -14,6 +14,7 @@ miden-air = {version = "0.3.0", path = "../../miden/air", default-features = fal
 miden-verifier = {version = "0.3.0", path = "../../miden/verifier", default-features = false}
 winter_fri = { package = "winter-fri", path = "../../winterfell/fri", version = "0.4", default-features = false }
 winter_air = { package = "winter-air", path = "../../winterfell/air", version = "0.4", default-features = false }
+winter_crypto = { package = "winter-crypto", path = "../../winterfell/crypto", version = "0.4", default-features = false }
 log = "0.4.17"
 web-sys = { version = "0.3.61", features = ["console"] }
 

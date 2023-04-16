@@ -7,6 +7,7 @@ use winter_air::{
     proof::{Commitments, Context, OodFrame, Queries, Table},
     Air, EvaluationFrame, ProofOptions, TraceLayout,
 };
+use winter_crypto::{hash::ByteDigest, hashers::Blake2s_256, Digest};
 use winter_fri::FriProof;
 
 impl IntoSdk<StarkProof, &ProcessorAir> for sdk::StarkProof {
@@ -14,7 +15,7 @@ impl IntoSdk<StarkProof, &ProcessorAir> for sdk::StarkProof {
         Self {
             ood_frame: Some(sdk::OodFrame::into_sdk(input.ood_frame, params)),
             context: Some(input.context.into()),
-            commitments: todo!(),
+            commitments: Some(sdk::Commitments::into_sdk(input.commitments, params)),
             trace_queries: todo!(),
             constraint_queries: todo!(),
             fri_proof: todo!(),
@@ -142,6 +143,37 @@ impl From<FieldExtension> for sdk::FieldExtension {
             FieldExtension::None => Self::None,
             FieldExtension::Quadratic => todo!(),
             FieldExtension::Cubic => todo!(),
+        }
+    }
+}
+
+impl<const N: usize> From<&ByteDigest<N>> for sdk::Digest {
+    fn from(value: &ByteDigest<N>) -> Self {
+        Self {
+            size: N as u32,
+            data: value.to_bytes().to_vec(),
+        }
+    }
+}
+
+impl IntoSdk<Commitments, &ProcessorAir> for sdk::Commitments {
+    fn into_sdk(input: Commitments, params: &ProcessorAir) -> Self {
+        let num_trace_segments = params.trace_layout().num_segments();
+        let lde_domain_size = params.lde_domain_size();
+        let fri_options = params.options().to_fri_options();
+        let num_fri_layers = fri_options.num_fri_layers(lde_domain_size);
+
+        let (trace_commitments, constraint_commitment, fri_commitments) = input
+            .clone()
+            .parse::<Blake2s_256<Felt>>(num_trace_segments, num_fri_layers)
+            .unwrap();
+
+        let constraint_root: sdk::Digest = (&constraint_commitment).into();
+
+        Self {
+            trace_roots: trace_commitments.iter().map(|d| d.into()).collect(),
+            constraint_root: Some(constraint_root),
+            fri_roots: fri_commitments.iter().map(|d| d.into()).collect(),
         }
     }
 }
