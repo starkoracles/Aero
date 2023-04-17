@@ -9,6 +9,7 @@ use winter_air::{
 };
 use winter_crypto::{hash::ByteDigest, hashers::Blake2s_256, Digest};
 use winter_fri::FriProof;
+use winter_verifier::TraceQueries;
 
 impl IntoSdk<StarkProof, &ProcessorAir> for sdk::StarkProof {
     fn into_sdk(input: StarkProof, params: &ProcessorAir) -> Self {
@@ -16,7 +17,7 @@ impl IntoSdk<StarkProof, &ProcessorAir> for sdk::StarkProof {
             ood_frame: Some(sdk::OodFrame::into_sdk(input.ood_frame, params)),
             context: Some(input.context.into()),
             commitments: Some(sdk::Commitments::into_sdk(input.commitments, params)),
-            trace_queries: todo!(),
+            trace_queries: Some(sdk::TraceQueries::into_sdk(input.trace_queries, params)),
             constraint_queries: todo!(),
             fri_proof: todo!(),
             pow_nonce: todo!(),
@@ -174,6 +175,38 @@ impl IntoSdk<Commitments, &ProcessorAir> for sdk::Commitments {
             trace_roots: trace_commitments.iter().map(|d| d.into()).collect(),
             constraint_root: Some(constraint_root),
             fri_roots: fri_commitments.iter().map(|d| d.into()).collect(),
+        }
+    }
+}
+
+impl From<Table<Felt>> for sdk::Table {
+    fn from(table: Table<Felt>) -> Self {
+        // table saved as a single dim array
+        let data = table.data().iter().map(|e| e.into()).collect::<Vec<_>>();
+
+        Self {
+            n_rows: table.num_rows() as u32,
+            n_cols: table.num_columns() as u32,
+            elements: data,
+        }
+    }
+}
+
+impl IntoSdk<Vec<Queries>, &ProcessorAir> for sdk::TraceQueries {
+    fn into_sdk(input: Vec<Queries>, params: &ProcessorAir) -> Self {
+        let trace_queries =
+            TraceQueries::<Felt, Blake2s_256<Felt>>::new(input.clone(), params).unwrap();
+
+        Self {
+            main_states: Some(trace_queries.main_states.into()),
+            aux_states: trace_queries.aux_states.map(|t| t.into()),
+            query_proofs: trace_queries
+                .query_proofs
+                .iter()
+                .map(|p| sdk::BatchMerkleProof {
+                    nodes: p.serialize_nodes(),
+                })
+                .collect::<Vec<_>>(),
         }
     }
 }

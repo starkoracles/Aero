@@ -4,9 +4,16 @@ package sdk;
 
 import "common.proto";
 
+message BatchMerkleProof {
+    // serialize batch proof to miden format
+    // TODO -- make this proof system agnostic
+    bytes nodes = 1;
+}
+
 message TraceQueries {
     Table main_states = 1;
     Table aux_states = 2;
+    repeated BatchMerkleProof query_proofs = 3;
 }
 
 message ConstraintQueries {
