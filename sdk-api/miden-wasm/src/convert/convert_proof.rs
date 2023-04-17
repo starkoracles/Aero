@@ -9,7 +9,7 @@ use winter_air::{
 };
 use winter_crypto::{hash::ByteDigest, hashers::Blake2s_256, Digest};
 use winter_fri::FriProof;
-use winter_verifier::TraceQueries;
+use winter_verifier::{ConstraintQueries, TraceQueries};
 
 impl IntoSdk<StarkProof, &ProcessorAir> for sdk::StarkProof {
     fn into_sdk(input: StarkProof, params: &ProcessorAir) -> Self {
@@ -18,9 +18,12 @@ impl IntoSdk<StarkProof, &ProcessorAir> for sdk::StarkProof {
             context: Some(input.context.into()),
             commitments: Some(sdk::Commitments::into_sdk(input.commitments, params)),
             trace_queries: Some(sdk::TraceQueries::into_sdk(input.trace_queries, params)),
-            constraint_queries: todo!(),
+            constraint_queries: Some(sdk::ConstraintQueries::into_sdk(
+                input.constraint_queries,
+                params,
+            )),
             fri_proof: todo!(),
-            pow_nonce: todo!(),
+            pow_nonce: input.pow_nonce,
         }
     }
 }
@@ -207,6 +210,17 @@ impl IntoSdk<Vec<Queries>, &ProcessorAir> for sdk::TraceQueries {
                     nodes: p.serialize_nodes(),
                 })
                 .collect::<Vec<_>>(),
+        }
+    }
+}
+
+impl IntoSdk<Queries, &ProcessorAir> for sdk::ConstraintQueries {
+    fn into_sdk(input: Queries, params: &ProcessorAir) -> Self {
+        let constraint_queries =
+            ConstraintQueries::<Felt, Blake2s_256<Felt>>::new(input, params).unwrap();
+
+        Self {
+            evaluations: Some(constraint_queries.evaluations.into()),
         }
     }
 }
