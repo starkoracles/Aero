@@ -24,6 +24,7 @@ serde = { version = "1", features = ["derive"] } # You only need this if you wan
 prost-build = {version = "0.11.8"}
 
 [dev-dependencies]
+hex = "0.4.3"
 wasm-bindgen-test = "0.3.34"
 
 [lib]

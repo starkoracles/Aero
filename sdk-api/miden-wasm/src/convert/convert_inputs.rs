@@ -15,7 +15,6 @@ impl Into<ProgramInputs> for MidenProgramInputs {
 impl From<u64> for sdk::FieldElement {
     fn from(value: u64) -> Self {
         Self {
-            size: 8,
             element: value.to_le_bytes().to_vec(),
         }
     }

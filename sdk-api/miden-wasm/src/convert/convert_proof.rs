@@ -56,8 +56,6 @@ impl From<&Felt> for sdk::FieldElement {
     fn from(element: &Felt) -> Self {
         Self {
             element: element.to_bytes(),
-            // we know that Felt is represented by u64
-            size: 8,
         }
     }
 }
@@ -77,7 +75,6 @@ impl From<Context> for sdk::Context {
         let trace_meta = binding.meta();
         let field_modulus = sdk::FieldElement {
             element: value.field_modulus_bytes().to_vec(),
-            size: 8,
         };
 
         Self {
@@ -153,7 +150,6 @@ impl From<FieldExtension> for sdk::FieldExtension {
 impl<const N: usize> From<&ByteDigest<N>> for sdk::Digest {
     fn from(value: &ByteDigest<N>) -> Self {
         Self {
-            size: N as u32,
             data: value.to_bytes().to_vec(),
         }
     }
@@ -277,7 +273,6 @@ impl From<PublicInputs> for sdk::MidenPublicInputs {
         Self {
             program_hash: Some(sdk::Digest {
                 data: inputs.program_hash.to_bytes(),
-                size: inputs.program_hash.to_bytes().len() as u32,
             }),
             stack_inputs: inputs.stack_inputs.iter().map(|e| e.into()).collect(),
             outputs: Some(inputs.outputs.into()),

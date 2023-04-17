@@ -3,8 +3,6 @@ syntax = "proto3";
 package sdk;
 
 message FieldElement {
-    // number of bytes it takes to represent this element
-    uint32 size = 1;
     // element le bytes
     bytes element = 2;
 }
@@ -17,8 +15,6 @@ message Table {
 }
 
 message Digest {
-    // size of digest
-    uint32 size = 1;
     // digest bytes
     bytes data = 2;
 }
