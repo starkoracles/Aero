@@ -1,5 +1,7 @@
 import { miden_prove } from "miden-wasm";
 import { MidenProgram, MidenProgramInputs } from "./proto-ts/miden_prover";
+import { StarkProof } from "./proto-ts/stark_proof";
+import { MidenProgramOutputs, MidenPublicInputs } from "./proto-ts/miden_vm";
 import { FieldExtension, HashFunction, PrimeField, ProofOptions } from "./proto-ts/context";
 
 export function prove(program: MidenProgram, inputs: MidenProgramInputs, options: ProofOptions = ProofOptions.fromJSON({
@@ -11,9 +13,15 @@ export function prove(program: MidenProgram, inputs: MidenProgramInputs, options
     friFoldingFactor: 8,
     friMaxRemainderSize: 256,
     primeField: PrimeField.GOLDILOCKS,
-})) {
+})): [StarkProof, MidenProgramOutputs, MidenPublicInputs] {
     let program_bytes = MidenProgram.encode(program).finish();
     let input_bytes = MidenProgramInputs.encode(inputs).finish();
     let option_bytes = ProofOptions.encode(options).finish();
-    miden_prove(program_bytes, input_bytes, option_bytes);
+    let proof_outputs = miden_prove(program_bytes, input_bytes, option_bytes);
+
+    let proof = StarkProof.decode(proof_outputs.proof);
+    let outputs = MidenProgramOutputs.decode(proof_outputs.program_outputs);
+    let pub_inputs = MidenPublicInputs.decode(proof_outputs.public_inputs);
+
+    return [proof, outputs, pub_inputs];
 }

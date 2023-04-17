@@ -5,8 +5,8 @@ package sdk;
 import "common.proto";
 
 message FriProofLayer {
-    bytes values = 1;
-    bytes paths = 2;
+    repeated FieldElement values = 1;
+    bytes proofs = 2;
 }
 
 message FriProof {

@@ -18,6 +18,7 @@ winter_crypto = { package = "winter-crypto", path = "../../winterfell/crypto", v
 winter_verifier = { package = "winter-verifier", path = "../../winterfell/verifier", version = "0.4", default-features = false }
 log = "0.4.17"
 web-sys = { version = "0.3.61", features = ["console"] }
+serde = { version = "1", features = ["derive"] } # You only need this if you want app persistence
 
 [build-dependencies]
 prost-build = {version = "0.11.8"}

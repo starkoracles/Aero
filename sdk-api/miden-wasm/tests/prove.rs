@@ -1,6 +1,10 @@
-use miden::ProofOptions;
+use std::fmt::LowerHex;
+
+use log::info;
 use miden_wasm::{
-    convert::sdk::sdk::{self, FieldExtension, HashFunction, PrimeField},
+    convert::sdk::sdk::{
+        self, Digest, FieldExtension, HashFunction, MidenPublicInputs, PrimeField,
+    },
     miden_prove,
 };
 use prost::Message;
@@ -38,10 +42,25 @@ fn prove_fib() {
         ..Default::default()
     };
 
-    miden_prove(
+    let prover_output = miden_prove(
         program.encode_to_vec(),
         program_inputs.encode_to_vec(),
         proof_options.encode_to_vec(),
     )
     .unwrap();
+
+    let sdk_output = sdk::MidenProgramOutputs::decode(&prover_output.program_outputs[..]).unwrap();
+    let pub_inputs: MidenPublicInputs =
+        sdk::MidenPublicInputs::decode(&prover_output.public_inputs[..])
+            .unwrap()
+            .into();
+
+    let u64_stack = sdk_output
+        .stack
+        .iter()
+        .map(|field_element| field_element.into())
+        .collect::<Vec<u64>>();
+
+    info!("outputs: {:?}", u64_stack);
+    info!("public inputs: {:?}", pub_inputs.program_hash.unwrap());
 }

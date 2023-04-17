@@ -1,15 +1,14 @@
-use crate::convert::convert_inputs::*;
 use crate::convert::sdk::sdk;
 use miden::{FieldExtension, HashFunction, StarkProof};
-use miden_air::{Felt, FieldElement, ProcessorAir};
-use miden_core::utils::Serializable;
+use miden_air::{Felt, ProcessorAir, PublicInputs};
+use miden_core::{utils::Serializable, ProgramOutputs};
 use winter_air::{
     proof::{Commitments, Context, OodFrame, Queries, Table},
     Air, EvaluationFrame, ProofOptions, TraceLayout,
 };
-use winter_crypto::{hash::ByteDigest, hashers::Blake2s_256, Digest};
+use winter_crypto::{hash::ByteDigest, hashers::Blake2s_256};
 use winter_fri::FriProof;
-use winter_verifier::{ConstraintQueries, TraceQueries};
+use winter_verifier::{math::log2, ConstraintQueries, TraceQueries};
 
 impl IntoSdk<StarkProof, &ProcessorAir> for sdk::StarkProof {
     fn into_sdk(input: StarkProof, params: &ProcessorAir) -> Self {
@@ -22,13 +21,13 @@ impl IntoSdk<StarkProof, &ProcessorAir> for sdk::StarkProof {
                 input.constraint_queries,
                 params,
             )),
-            fri_proof: todo!(),
+            fri_proof: Some(sdk::FriProof::into_sdk(input.fri_proof, params)),
             pow_nonce: input.pow_nonce,
         }
     }
 }
 
-trait IntoSdk<Input, Parameters> {
+pub trait IntoSdk<Input, Parameters> {
     fn into_sdk(input: Input, params: Parameters) -> Self;
 }
 
@@ -221,6 +220,67 @@ impl IntoSdk<Queries, &ProcessorAir> for sdk::ConstraintQueries {
 
         Self {
             evaluations: Some(constraint_queries.evaluations.into()),
+        }
+    }
+}
+
+impl IntoSdk<FriProof, &ProcessorAir> for sdk::FriProof {
+    fn into_sdk(proof: FriProof, params: &ProcessorAir) -> Self {
+        let num_partitions = log2(proof.num_partitions());
+        let (queries_values, proofs) = proof
+            .clone()
+            .parse_layers::<Blake2s_256<Felt>, Felt>(
+                params.lde_domain_size(),
+                params.options().to_fri_options().folding_factor(),
+            )
+            .unwrap();
+
+        let layers = proofs
+            .iter()
+            .zip(queries_values)
+            .map(|(p, q)| sdk::FriProofLayer {
+                values: q.iter().map(|e| e.into()).collect::<Vec<_>>(),
+                proofs: p.serialize_nodes(),
+            })
+            .collect();
+
+        let remainder = proof
+            .parse_remainder::<Felt>()
+            .unwrap()
+            .iter()
+            .map(|e| e.into())
+            .collect();
+
+        Self {
+            layers,
+            remainder,
+            num_partitions,
+        }
+    }
+}
+
+impl From<ProgramOutputs> for sdk::MidenProgramOutputs {
+    fn from(outputs: ProgramOutputs) -> Self {
+        Self {
+            stack: outputs.stack().iter().map(|e| e.clone().into()).collect(),
+            overflow_addrs: outputs
+                .overflow_addrs()
+                .iter()
+                .map(|e| e.clone().into())
+                .collect(),
+        }
+    }
+}
+
+impl From<PublicInputs> for sdk::MidenPublicInputs {
+    fn from(inputs: PublicInputs) -> Self {
+        Self {
+            program_hash: Some(sdk::Digest {
+                data: inputs.program_hash.to_bytes(),
+                size: inputs.program_hash.to_bytes().len() as u32,
+            }),
+            stack_inputs: inputs.stack_inputs.iter().map(|e| e.into()).collect(),
+            outputs: Some(inputs.outputs.into()),
         }
     }
 }

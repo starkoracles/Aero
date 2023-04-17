@@ -1,6 +1,7 @@
 import { prove } from "../sdk";
 import init from "miden-wasm";
 import { MidenProgram, MidenProgramInputs } from "../proto-ts/miden_prover";
+import { Digest } from "../proto-ts/common";
 
 async function onPageLoad() {
     const proofPromise = runProof();
@@ -23,7 +24,8 @@ async function runProof() {
             });
             let inputs = MidenProgramInputs.fromJSON({ stackInit: [0, 1], adviceTape: [] });
             await init();
-            prove(program, inputs);
+            const [, outputs,] = prove(program, inputs);
+            console.log("Outputs: ", outputs);
             resolve();
         }, 3000);
     });
