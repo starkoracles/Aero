@@ -1,12 +1,12 @@
 use crate::convert::sdk::sdk;
-use miden::{FieldExtension, HashFunction, StarkProof};
+use miden::{Digest, FieldExtension, HashFunction, StarkProof};
 use miden_air::{Felt, ProcessorAir, PublicInputs};
 use miden_core::{utils::Serializable, ProgramOutputs};
 use winter_air::{
     proof::{Commitments, Context, OodFrame, Queries, Table},
     Air, EvaluationFrame, ProofOptions, TraceLayout,
 };
-use winter_crypto::{hash::ByteDigest, hashers::Blake2s_256};
+use winter_crypto::{hash::ByteDigest, hashers::Blake2s_256, BatchMerkleProof, Hasher};
 use winter_fri::FriProof;
 use winter_verifier::{math::log2, ConstraintQueries, TraceQueries};
 
@@ -201,10 +201,8 @@ impl IntoSdk<Vec<Queries>, &ProcessorAir> for sdk::TraceQueries {
             query_proofs: trace_queries
                 .query_proofs
                 .iter()
-                .map(|p| sdk::BatchMerkleProof {
-                    nodes: p.serialize_nodes(),
-                })
-                .collect::<Vec<_>>(),
+                .map(|p| p.into())
+                .collect(),
         }
     }
 }
@@ -216,6 +214,7 @@ impl IntoSdk<Queries, &ProcessorAir> for sdk::ConstraintQueries {
 
         Self {
             evaluations: Some(constraint_queries.evaluations.into()),
+            query_proof: Some((&constraint_queries.query_proofs).into()),
         }
     }
 }
@@ -236,7 +235,7 @@ impl IntoSdk<FriProof, &ProcessorAir> for sdk::FriProof {
             .zip(queries_values)
             .map(|(p, q)| sdk::FriProofLayer {
                 values: q.iter().map(|e| e.into()).collect::<Vec<_>>(),
-                proofs: p.serialize_nodes(),
+                proofs: Some(p.into()),
             })
             .collect();
 
@@ -276,6 +275,33 @@ impl From<PublicInputs> for sdk::MidenPublicInputs {
             }),
             stack_inputs: inputs.stack_inputs.iter().map(|e| e.into()).collect(),
             outputs: Some(inputs.outputs.into()),
+        }
+    }
+}
+
+impl<H: Hasher> From<&BatchMerkleProof<H>> for sdk::BatchMerkleProof {
+    fn from(proof: &BatchMerkleProof<H>) -> Self {
+        let leaves = proof
+            .leaves
+            .iter()
+            .map(|e| sdk::Digest { data: e.to_bytes() })
+            .collect();
+
+        let nodes = proof
+            .nodes
+            .iter()
+            .map(|e| sdk::BatchMerkleProofLayer {
+                nodes: e
+                    .iter()
+                    .map(|v| sdk::Digest { data: v.to_bytes() })
+                    .collect(),
+            })
+            .collect();
+
+        Self {
+            leaves,
+            nodes,
+            depth: proof.depth as u32,
         }
     }
 }

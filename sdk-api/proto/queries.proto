@@ -4,10 +4,14 @@ package sdk;
 
 import "common.proto";
 
+message BatchMerkleProofLayer {
+    repeated Digest nodes = 1;
+}
+
 message BatchMerkleProof {
-    // serialize batch proof to miden format
-    // TODO -- make this proof system agnostic
-    bytes nodes = 1;
+    repeated Digest leaves = 1;
+    repeated BatchMerkleProofLayer nodes = 2;
+    uint32 depth = 3;
 }
 
 message TraceQueries {
@@ -18,4 +22,5 @@ message TraceQueries {
 
 message ConstraintQueries {
     Table evaluations = 1;
+    BatchMerkleProof query_proof = 2;
 }

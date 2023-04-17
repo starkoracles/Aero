@@ -3,10 +3,11 @@ syntax = "proto3";
 package sdk;
 
 import "common.proto";
+import "queries.proto";
 
 message FriProofLayer {
     repeated FieldElement values = 1;
-    bytes proofs = 2;
+    BatchMerkleProof proofs = 2;
 }
 
 message FriProof {
