@@ -25,3 +25,16 @@ export function prove(program: MidenProgram, inputs: MidenProgramInputs, options
 
     return [proof, outputs, pub_inputs];
 }
+
+export function uint8ArrayToU64LE(arr: Uint8Array): BigInt {
+    if (arr.length !== 8) {
+        throw new Error('Uint8Array must have exactly 8 elements to be converted to u64.');
+    }
+
+    let result = BigInt(0);
+    for (let i = 0; i < arr.length; i++) {
+        result |= BigInt(arr[i]) << BigInt(i * 8);
+    }
+
+    return result;
+}
