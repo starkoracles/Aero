@@ -26,8 +26,9 @@ pub fn miden_prove(
     program_inputs: Vec<u8>,
     proof_options: Vec<u8>,
 ) -> Result<ProverOutput, JsValue> {
-    log::set_logger(&DEFAULT_LOGGER).unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    // logger and panic set once
+    console_error_panic_hook::set_once();
+    set_once_logger();
 
     console::time_with_label("preparing_inputs");
     info!("============================================================");
@@ -84,4 +85,14 @@ pub fn miden_prove(
         public_inputs: sdk_pub_inputs.encode_to_vec(),
     };
     Ok(js_output)
+}
+
+#[inline]
+fn set_once_logger() {
+    use std::sync::Once;
+    static SET_SINGLETONS: Once = Once::new();
+    SET_SINGLETONS.call_once(|| {
+        log::set_logger(&DEFAULT_LOGGER).unwrap();
+        log::set_max_level(log::LevelFilter::Info);
+    });
 }

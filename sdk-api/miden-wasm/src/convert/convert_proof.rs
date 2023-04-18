@@ -1,5 +1,5 @@
 use crate::convert::sdk::sdk;
-use miden::{Digest, FieldExtension, HashFunction, StarkProof};
+use miden::{FieldExtension, HashFunction, StarkProof};
 use miden_air::{Felt, ProcessorAir, PublicInputs};
 use miden_core::{utils::Serializable, ProgramOutputs};
 use winter_air::{
