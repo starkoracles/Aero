@@ -1,3 +1,4 @@
+const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 module.exports = {
@@ -9,12 +10,6 @@ module.exports = {
     },
     optimization: {
         minimize: false,
-    },
-    devServer: {
-        open: true,
-        hot: true,
-        host: "localhost",
-        port: 9000
     },
     module: {
         rules: [
@@ -30,6 +25,15 @@ module.exports = {
                 exclude: /node_modules|\.d\.ts$/, // this line as well
                 use: {
                     loader: "ts-loader"
+                },
+            },
+            {
+                test: /src\/hashing_worker\.ts$/,
+                use: {
+                    loader: 'worker-loader',
+                    options: {
+                        filename: 'hashing_worker.js',
+                    },
                 },
             },
         ]

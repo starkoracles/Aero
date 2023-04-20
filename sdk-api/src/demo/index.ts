@@ -1,11 +1,16 @@
 import { prove, uint8ArrayToU64LE } from "../sdk";
-import init from "miden-wasm";
+import init, { start } from "miden-wasm";
 import { MidenProgram, MidenProgramInputs } from "../proto-ts/miden_prover";
-import { Digest } from "../proto-ts/common";
+import "../hashing_worker";
 
 async function onPageLoad() {
     document.querySelector("body").innerHTML = `<h1>Proving the 10th fib number!</h1><button id="run_proof">Run Proof</button><h2 id="result"></h2>`;
     console.log("Hello!");
+    setTimeout(async () => {
+        await init();
+        start();
+        console.log("after wasm init");
+    }, 3000);
     document.addEventListener('DOMContentLoaded', function () {
         const button = document.getElementById('run_proof');
 
@@ -16,18 +21,33 @@ async function onPageLoad() {
 }
 
 async function runProof() {
+    console.log("Running proof");
     return new Promise<void>((resolve) => {
         setTimeout(async () => {
             let program = MidenProgram.fromJSON({
                 program:
-                    `begin 
-                        repeat.10
-                            swap dup.1 add
-                        end
+                    `
+                    # STACK EFFECT
+                    # ITERATION-AMOUNT -- FIB-ANSWER #
+                    proc.fib_iter
+                      push.0
+                      push.1
+                      dup.2
+                      neq.0
+                      # Looks about 8 cyles every loop #
+                      while.true
+                        swap dup.1 add movup.2 sub.1 dup movdn.3 neq.0
+                      end
+                      drop
+                      swap
+                      drop
+                    end
+                    
+                    begin
+                      exec.fib_iter
                     end`
             });
-            let inputs = MidenProgramInputs.fromJSON({ stackInit: [0, 1], adviceTape: [] });
-            await init();
+            let inputs = MidenProgramInputs.fromJSON({ stackInit: [200], adviceTape: [] });
             const [, outputs,] = prove(program, inputs);
 
             let result = uint8ArrayToU64LE(outputs.stack[0].element);

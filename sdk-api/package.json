@@ -9,6 +9,7 @@
     "build:wasm": "rm -rf node_modules/miden-wasm && cd miden-wasm && wasm-pack build --release --target web --out-name miden-wasm --out-dir pkg && cd .. && npm install",
     "build:wasm:debug": "rm -rf node_modules/miden-wasm && cd miden-wasm && wasm-pack build --debug --target web --out-name miden-wasm --out-dir pkg && cd .. && npm install",
     "build": "npm run build:wasm && npm run build:proto && tsc",
+    "build:debug": "npm run build:wasm:debug && npm run build:proto && tsc",
     "serve:demo": "webpack serve --config webpack.config.demo.js --mode development --open"
   },
   "keywords": [
@@ -33,6 +34,7 @@
     "ts-node": "^10.9.1",
     "typescript": "^5.0.4",
     "webpack-cli": "^5.0.1",
-    "webpack-dev-server": "^4.13.2"
+    "webpack-dev-server": "^4.13.2",
+    "worker-loader": "^3.0.8"
   }
 }
