@@ -2,14 +2,17 @@
 
 use js_sys::Array;
 use log::info;
-use miden::prove;
-use miden_air::{Felt, FieldElement, ProcessorAir, PublicInputs};
+use miden::{verify, ExecutionTrace, Program, ProgramInputs, ProofOptions, StarkProof};
+use miden_air::{Felt, FieldElement, ProcessorAir, PublicInputs, StarkField};
+use miden_core::ProgramOutputs;
+use miden_prover::ExecutionProver;
 use prost::Message;
 use std::sync::Once;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 use web_sys::{console, MessageEvent, Worker};
 use winter_air::Air;
+use winter_prover::Prover;
 
 pub mod convert;
 
@@ -50,67 +53,131 @@ pub fn blake2_hash_elements(element_table: Array) -> Result<Array, JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn miden_prove(
-    program: Vec<u8>,
-    program_inputs: Vec<u8>,
-    proof_options: Vec<u8>,
-) -> Result<ProverOutput, JsValue> {
-    worker_entry_point()?;
-    console::time_with_label("preparing_inputs");
-    info!("============================================================");
-    info!("Reading program and inputs");
-    info!("============================================================");
+pub struct MidenProver {
+    trace: Option<ExecutionTrace>,
+    program: Option<Program>,
+    program_inputs: Option<ProgramInputs>,
+    program_outputs: Option<ProgramOutputs>,
+    proof_options: Option<ProofOptions>,
+}
 
-    let miden_program =
-        sdk::MidenProgram::decode(&program[..]).expect("Cannot decode miden program");
-    let miden_program_inputs = sdk::MidenProgramInputs::decode(&program_inputs[..])
-        .expect("Cannot decode miden program inputs");
-    let proof_options =
-        sdk::ProofOptions::decode(&proof_options[..]).expect("Cannot decode proof options");
+#[wasm_bindgen]
+impl MidenProver {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self {
+            trace: None,
+            program: None,
+            program_inputs: None,
+            proof_options: None,
+            program_outputs: None,
+        }
+    }
 
-    let program = miden_program.into();
-    let program_inputs = miden_program_inputs.into();
+    #[wasm_bindgen]
+    pub fn prove(
+        &mut self,
+        program: Vec<u8>,
+        program_inputs: Vec<u8>,
+        proof_options: Vec<u8>,
+    ) -> Result<ProverOutput, JsValue> {
+        console::time_with_label("preparing_inputs");
+        let miden_program =
+            sdk::MidenProgram::decode(&program[..]).expect("Cannot decode miden program");
+        let miden_program_inputs = sdk::MidenProgramInputs::decode(&program_inputs[..])
+            .expect("Cannot decode miden program inputs");
+        let proof_options =
+            sdk::ProofOptions::decode(&proof_options[..]).expect("Cannot decode proof options");
 
-    info!("============================================================");
-    info!("Prove program");
-    info!("============================================================");
-    console::time_end_with_label("preparing_inputs");
-    console::time_with_label("prove_program");
+        self.program = Some(miden_program.into());
+        self.program_inputs = Some(miden_program_inputs.into());
+        self.proof_options = Some(proof_options.into());
+        console::time_end_with_label("preparing_inputs");
+        console::time_with_label("generating_trace");
 
-    // execute program and generate proof
-    let (outputs, proof) = prove(&program, &program_inputs, &proof_options.into())
-        .map_err(|err| format!("Failed to prove program - {:?}", err))?;
+        self.build_execution_trace()?;
+        console::time_end_with_label("generating_trace");
+        console::time_with_label("prove_program");
 
-    console::time_end_with_label("prove_program");
+        // execute program and generate proof
+        let proof = self.prove_stage_1()?;
+        console::time_end_with_label("prove_program");
 
-    let pub_inputs = PublicInputs::new(
-        program.hash(),
-        program_inputs.stack_init().to_vec(),
-        outputs.clone(),
-    );
-    let air = ProcessorAir::new(
-        proof.get_trace_info(),
-        pub_inputs.clone(),
-        proof.options().clone(),
-    );
+        let pub_inputs = PublicInputs::new(
+            self.program.clone().unwrap().hash(),
+            self.program_inputs.clone().unwrap().stack_init().to_vec(),
+            self.program_outputs.clone().unwrap(),
+        );
+        let air = ProcessorAir::new(
+            proof.get_trace_info(),
+            pub_inputs.clone(),
+            proof.options().clone(),
+        );
 
-    info!(
-        "proof size: {:.1} KB",
-        proof.to_bytes().len() as f64 / 1024f64
-    );
-    let sdk_proof: sdk::StarkProof = sdk::StarkProof::into_sdk(proof, &air);
-    info!(
-        "SDK Proof size: {:.1} KB",
-        sdk_proof.encode_to_vec().len() as f64 / 1024f64
-    );
-    let sdk_outputs: sdk::MidenProgramOutputs = outputs.into();
-    let sdk_pub_inputs: sdk::MidenPublicInputs = pub_inputs.into();
-    let js_output = ProverOutput {
-        proof: sdk_proof.encode_to_vec(),
-        program_outputs: sdk_outputs.encode_to_vec(),
-        public_inputs: sdk_pub_inputs.encode_to_vec(),
-    };
-    Ok(js_output)
+        let stack_inputs: Vec<u64> = self
+            .program_inputs
+            .clone()
+            .unwrap()
+            .stack_init()
+            .iter()
+            // for whatever reason miden reverses the stack
+            .rev()
+            .map(|e| e.as_int())
+            .collect();
+
+        console::time_with_label("verify_program");
+        verify(
+            self.program.clone().unwrap().hash(),
+            &stack_inputs[..],
+            &self.program_outputs.clone().unwrap(),
+            proof.clone(),
+        )
+        .map_err(|e| format!("Could not verify proof due to {}", e))?;
+        console::time_end_with_label("verify_program");
+
+        info!(
+            "proof size: {:.1} KB",
+            proof.to_bytes().len() as f64 / 1024f64
+        );
+        let sdk_proof: sdk::StarkProof = sdk::StarkProof::into_sdk(proof, &air);
+        info!(
+            "SDK Proof size: {:.1} KB",
+            sdk_proof.encode_to_vec().len() as f64 / 1024f64
+        );
+        let sdk_outputs: sdk::MidenProgramOutputs = self.program_outputs.clone().unwrap().into();
+        let sdk_pub_inputs: sdk::MidenPublicInputs = pub_inputs.into();
+        let js_output = ProverOutput {
+            proof: sdk_proof.encode_to_vec(),
+            program_outputs: sdk_outputs.encode_to_vec(),
+            public_inputs: sdk_pub_inputs.encode_to_vec(),
+        };
+        Ok(js_output)
+    }
+
+    fn build_execution_trace(&mut self) -> Result<(), JsValue> {
+        let trace = miden_processor::execute(
+            &self.program.clone().unwrap(),
+            &self.program_inputs.clone().unwrap(),
+        )
+        .map_err(|_| "Could not generate miden trace")?;
+        self.program_outputs = Some(trace.program_outputs().clone());
+        self.trace = Some(trace);
+        Ok(())
+    }
+
+    // start the proving process, generate the main trace
+    // before commitment will be dispatched to workers
+    fn prove_stage_1(&self) -> Result<StarkProof, JsValue> {
+        let prover = ExecutionProver::new(
+            self.proof_options.clone().unwrap(),
+            self.program_inputs.clone().unwrap().stack_init().to_vec(),
+            self.program_outputs.clone().unwrap(),
+        );
+        let proof = prover
+            .prove(self.trace.clone().unwrap())
+            .map_err(|err| format!("Failed to prove program - {:?}", err))?;
+        Ok(proof)
+    }
 }
 
 fn setup_worker() -> Result<(), JsValue> {

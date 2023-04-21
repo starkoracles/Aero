@@ -1,4 +1,4 @@
-import { miden_prove } from "miden-wasm";
+import { MidenProver } from "miden-wasm";
 import { MidenProgram, MidenProgramInputs } from "./proto-ts/miden_prover";
 import { StarkProof } from "./proto-ts/stark_proof";
 import { MidenProgramOutputs, MidenPublicInputs } from "./proto-ts/miden_vm";
@@ -17,7 +17,8 @@ export function prove(program: MidenProgram, inputs: MidenProgramInputs, options
     let program_bytes = MidenProgram.encode(program).finish();
     let input_bytes = MidenProgramInputs.encode(inputs).finish();
     let option_bytes = ProofOptions.encode(options).finish();
-    let proof_outputs = miden_prove(program_bytes, input_bytes, option_bytes);
+    let miden_prover = new MidenProver();
+    let proof_outputs = miden_prover.prove(program_bytes, input_bytes, option_bytes);
 
     let proof = StarkProof.decode(proof_outputs.proof);
     let outputs = MidenProgramOutputs.decode(proof_outputs.program_outputs);

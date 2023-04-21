@@ -2,13 +2,17 @@ use hex::ToHex;
 use log::info;
 use miden_wasm::{
     convert::sdk::sdk::{self, FieldExtension, HashFunction, MidenPublicInputs, PrimeField},
-    miden_prove,
+    MidenProver,
 };
 use prost::Message;
+use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 use wasm_bindgen_test::*;
 
 #[wasm_bindgen_test]
 fn prove_fib() {
+    log::set_logger(&DEFAULT_LOGGER).unwrap();
+    log::set_max_level(log::LevelFilter::Info);
+
     let program_10_fib = "
     begin 
         repeat.10
@@ -39,12 +43,15 @@ fn prove_fib() {
         ..Default::default()
     };
 
-    let prover_output = miden_prove(
-        program.encode_to_vec(),
-        program_inputs.encode_to_vec(),
-        proof_options.encode_to_vec(),
-    )
-    .unwrap();
+    let mut miden_prover = MidenProver::new();
+
+    let prover_output = miden_prover
+        .prove(
+            program.encode_to_vec(),
+            program_inputs.encode_to_vec(),
+            proof_options.encode_to_vec(),
+        )
+        .unwrap();
 
     let sdk_output = sdk::MidenProgramOutputs::decode(&prover_output.program_outputs[..]).unwrap();
     let pub_inputs: MidenPublicInputs =

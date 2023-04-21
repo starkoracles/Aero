@@ -47,7 +47,7 @@ async function runProof() {
                       exec.fib_iter
                     end`
             });
-            let inputs = MidenProgramInputs.fromJSON({ stackInit: [200], adviceTape: [] });
+            let inputs = MidenProgramInputs.fromJSON({ stackInit: [10], adviceTape: [] });
             const [, outputs,] = prove(program, inputs);
 
             let result = uint8ArrayToU64LE(outputs.stack[0].element);
