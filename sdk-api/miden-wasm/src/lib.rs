@@ -12,7 +12,8 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 use web_sys::{console, MessageEvent, Worker};
 use winter_air::Air;
-use winter_prover::Prover;
+use winter_crypto::hashers::Blake2s_256;
+use winter_prover::{Matrix, Prover, ProverChannel, Serializable, StarkDomain, Trace};
 
 pub mod convert;
 
@@ -59,6 +60,9 @@ pub struct MidenProver {
     program_inputs: Option<ProgramInputs>,
     program_outputs: Option<ProgramOutputs>,
     proof_options: Option<ProofOptions>,
+    channel: Option<ProverChannel<<ExecutionProver as Prover>::Air, Felt, Blake2s_256<Felt>>>,
+    trace_polys: Option<Matrix<Felt>>,
+    trace_lde: Option<Matrix<Felt>>,
 }
 
 #[wasm_bindgen]
@@ -71,6 +75,9 @@ impl MidenProver {
             program_inputs: None,
             proof_options: None,
             program_outputs: None,
+            channel: None,
+            trace_polys: None,
+            trace_lde: None,
         }
     }
 
@@ -100,7 +107,8 @@ impl MidenProver {
         console::time_with_label("prove_program");
 
         // execute program and generate proof
-        let proof = self.prove_stage_1()?;
+        self.prove_stage_1()?;
+        let proof = self.prove_full()?;
         console::time_end_with_label("prove_program");
 
         let pub_inputs = PublicInputs::new(
@@ -167,7 +175,49 @@ impl MidenProver {
 
     // start the proving process, generate the main trace
     // before commitment will be dispatched to workers
-    fn prove_stage_1(&self) -> Result<StarkProof, JsValue> {
+    fn prove_stage_1(&mut self) -> Result<(), JsValue> {
+        let prover = ExecutionProver::new(
+            self.proof_options.clone().unwrap(),
+            self.program_inputs.clone().unwrap().stack_init().to_vec(),
+            self.program_outputs.clone().unwrap(),
+        );
+        let trace = self.trace.clone().unwrap();
+        // 0 ----- instantiate AIR and prover channel ---------------------------------------------
+
+        // serialize public inputs; these will be included in the seed for the public coin
+        let pub_inputs = prover.get_pub_inputs(&trace);
+        let mut pub_inputs_bytes = Vec::new();
+        pub_inputs.write_into(&mut pub_inputs_bytes);
+
+        // create an instance of AIR for the provided parameters. this takes a generic description
+        // of the computation (provided via AIR type), and creates a description of a specific
+        // execution of the computation for the provided public inputs.
+        let air: ProcessorAir = ProcessorAir::new(
+            trace.get_info(),
+            pub_inputs,
+            self.proof_options.clone().unwrap().0,
+        );
+
+        // create a channel which is used to simulate interaction between the prover and the
+        // verifier; the channel will be used to commit to values and to draw randomness that
+        // should come from the verifier.
+        self.channel = Some(ProverChannel::<
+            <ExecutionProver as Prover>::Air,
+            Felt,
+            Blake2s_256<Felt>,
+        >::new(air.clone(), pub_inputs_bytes));
+
+        // start building the trace commitments
+        let domain = StarkDomain::new(&air);
+        let main_trace = trace.main_segment();
+        let trace_polys = main_trace.interpolate_columns();
+        self.trace_lde = Some(trace_polys.evaluate_columns_over(&domain));
+        self.trace_polys = Some(trace_polys);
+
+        Ok(())
+    }
+
+    fn prove_full(&self) -> Result<StarkProof, JsValue> {
         let prover = ExecutionProver::new(
             self.proof_options.clone().unwrap(),
             self.program_inputs.clone().unwrap().stack_init().to_vec(),
