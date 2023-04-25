@@ -13,18 +13,18 @@ export function prove(program: MidenProgram, inputs: MidenProgramInputs, options
     friFoldingFactor: 8,
     friMaxRemainderSize: 256,
     primeField: PrimeField.GOLDILOCKS,
-})): [StarkProof, MidenProgramOutputs, MidenPublicInputs] {
+})): void {
     let program_bytes = MidenProgram.encode(program).finish();
     let input_bytes = MidenProgramInputs.encode(inputs).finish();
     let option_bytes = ProofOptions.encode(options).finish();
     let miden_prover = new MidenProver();
-    let proof_outputs = miden_prover.prove(program_bytes, input_bytes, option_bytes);
+    miden_prover.prove(program_bytes, input_bytes, option_bytes);
 
-    let proof = StarkProof.decode(proof_outputs.proof);
-    let outputs = MidenProgramOutputs.decode(proof_outputs.program_outputs);
-    let pub_inputs = MidenPublicInputs.decode(proof_outputs.public_inputs);
+    // let proof = StarkProof.decode(proof_outputs.proof);
+    // let outputs = MidenProgramOutputs.decode(proof_outputs.program_outputs);
+    // let pub_inputs = MidenPublicInputs.decode(proof_outputs.public_inputs);
 
-    return [proof, outputs, pub_inputs];
+    // return [proof, outputs, pub_inputs];
 }
 
 export function uint8ArrayToU64LE(arr: Uint8Array): BigInt {

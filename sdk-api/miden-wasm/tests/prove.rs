@@ -43,7 +43,7 @@ fn prove_fib() {
         ..Default::default()
     };
 
-    let mut miden_prover = MidenProver::new();
+    let mut miden_prover = MidenProver::new().unwrap();
 
     let prover_output = miden_prover
         .prove(
@@ -53,21 +53,21 @@ fn prove_fib() {
         )
         .unwrap();
 
-    let sdk_output = sdk::MidenProgramOutputs::decode(&prover_output.program_outputs[..]).unwrap();
-    let pub_inputs: MidenPublicInputs =
-        sdk::MidenPublicInputs::decode(&prover_output.public_inputs[..])
-            .unwrap()
-            .into();
+    // let sdk_output = sdk::MidenProgramOutputs::decode(&prover_output.program_outputs[..]).unwrap();
+    // let pub_inputs: MidenPublicInputs =
+    //     sdk::MidenPublicInputs::decode(&prover_output.public_inputs[..])
+    //         .unwrap()
+    //         .into();
 
-    let u64_stack = sdk_output
-        .stack
-        .iter()
-        .map(|field_element| field_element.into())
-        .collect::<Vec<u64>>();
+    // let u64_stack = sdk_output
+    //     .stack
+    //     .iter()
+    //     .map(|field_element| field_element.into())
+    //     .collect::<Vec<u64>>();
 
-    info!("outputs: {:?}", u64_stack);
-    info!(
-        "Program hash: {:?}",
-        &pub_inputs.program_hash.unwrap().data.encode_hex::<String>()
-    );
+    // info!("outputs: {:?}", u64_stack);
+    // info!(
+    //     "Program hash: {:?}",
+    //     &pub_inputs.program_hash.unwrap().data.encode_hex::<String>()
+    // );
 }

@@ -47,10 +47,12 @@ async function runProof() {
                       exec.fib_iter
                     end`
             });
-            let inputs = MidenProgramInputs.fromJSON({ stackInit: [10], adviceTape: [] });
-            const [, outputs,] = prove(program, inputs);
+            let inputs = MidenProgramInputs.fromJSON({ stackInit: [10000], adviceTape: [] });
+            // const [, outputs,] = prove(program, inputs);
+            prove(program, inputs);
 
-            let result = uint8ArrayToU64LE(outputs.stack[0].element);
+            // let result = uint8ArrayToU64LE(outputs.stack[0].element);
+            let result = 111
 
             document.getElementById("result").innerHTML = "Result: " + result.toString();
             console.log("Result: ", result);

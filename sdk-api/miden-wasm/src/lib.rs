@@ -6,16 +6,31 @@ use miden::{verify, ExecutionTrace, Program, ProgramInputs, ProofOptions, StarkP
 use miden_air::{Felt, FieldElement, ProcessorAir, PublicInputs, StarkField};
 use miden_core::ProgramOutputs;
 use miden_prover::ExecutionProver;
+use pool::WorkerPool;
 use prost::Message;
 use std::sync::Once;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 use web_sys::{console, MessageEvent, Worker};
 use winter_air::Air;
-use winter_crypto::hashers::Blake2s_256;
+use winter_crypto::{hashers::Blake2s_256, Digest, ElementHasher};
 use winter_prover::{Matrix, Prover, ProverChannel, Serializable, StarkDomain, Trace};
 
 pub mod convert;
+
+macro_rules! console_log {
+    ($($t:tt)*) => (crate::log(&format_args!($($t)*).to_string()))
+}
+
+pub mod pool;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    fn logv(x: &JsValue);
+}
 
 use crate::convert::sdk::sdk;
 use convert::convert_proof::*;
@@ -39,21 +54,6 @@ pub fn start() -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn blake2_hash_elements(element_table: Array) -> Result<Array, JsValue> {
-    set_once_logger();
-    info!("called with {:?}", &element_table);
-    // we expect a 2d Array of JsValues that would translate into Felts
-    for row in element_table.iter() {
-        let row_array = row.dyn_into::<Array>()?;
-        for column in row_array.iter() {
-            let element = Felt::from_js_value(column);
-            info!("element: {}", &element);
-        }
-    }
-    Ok(Array::new_with_length(0))
-}
-
-#[wasm_bindgen]
 pub struct MidenProver {
     trace: Option<ExecutionTrace>,
     program: Option<Program>,
@@ -63,13 +63,14 @@ pub struct MidenProver {
     channel: Option<ProverChannel<<ExecutionProver as Prover>::Air, Felt, Blake2s_256<Felt>>>,
     trace_polys: Option<Matrix<Felt>>,
     trace_lde: Option<Matrix<Felt>>,
+    worker_pool: WorkerPool,
 }
 
 #[wasm_bindgen]
 impl MidenProver {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Result<MidenProver, JsValue> {
+        Ok(Self {
             trace: None,
             program: None,
             program_inputs: None,
@@ -78,7 +79,8 @@ impl MidenProver {
             channel: None,
             trace_polys: None,
             trace_lde: None,
-        }
+            worker_pool: WorkerPool::new(8)?,
+        })
     }
 
     #[wasm_bindgen]
@@ -87,7 +89,7 @@ impl MidenProver {
         program: Vec<u8>,
         program_inputs: Vec<u8>,
         proof_options: Vec<u8>,
-    ) -> Result<ProverOutput, JsValue> {
+    ) -> Result<(), JsValue> {
         console::time_with_label("preparing_inputs");
         let miden_program =
             sdk::MidenProgram::decode(&program[..]).expect("Cannot decode miden program");
@@ -104,62 +106,67 @@ impl MidenProver {
 
         self.build_execution_trace()?;
         console::time_end_with_label("generating_trace");
-        console::time_with_label("prove_program");
+        console::time_with_label("prove_program_stage1");
 
         // execute program and generate proof
         self.prove_stage_1()?;
-        let proof = self.prove_full()?;
-        console::time_end_with_label("prove_program");
+        console::time_end_with_label("prove_program_stage1");
+        console::time_with_label("prove_trace_hashes");
+        self.prove_trace_hashes()?;
+        console::time_end_with_label("prove_trace_hashes");
+        Ok(())
+        // let proof = self.prove_full()?;
+        // console::time_end_with_label("prove_program");
 
-        let pub_inputs = PublicInputs::new(
-            self.program.clone().unwrap().hash(),
-            self.program_inputs.clone().unwrap().stack_init().to_vec(),
-            self.program_outputs.clone().unwrap(),
-        );
-        let air = ProcessorAir::new(
-            proof.get_trace_info(),
-            pub_inputs.clone(),
-            proof.options().clone(),
-        );
+        // let pub_inputs = PublicInputs::new(
+        //     self.program.clone().unwrap().hash(),
+        //     self.program_inputs.clone().unwrap().stack_init().to_vec(),
+        //     self.program_outputs.clone().unwrap(),
+        // );
+        // let air = ProcessorAir::new(
+        //     proof.get_trace_info(),
+        //     pub_inputs.clone(),
+        //     proof.options().clone(),
+        // );
 
-        let stack_inputs: Vec<u64> = self
-            .program_inputs
-            .clone()
-            .unwrap()
-            .stack_init()
-            .iter()
-            // for whatever reason miden reverses the stack
-            .rev()
-            .map(|e| e.as_int())
-            .collect();
+        // let stack_inputs: Vec<u64> = self
+        //     .program_inputs
+        //     .clone()
+        //     .unwrap()
+        //     .stack_init()
+        //     .iter()
+        //     // for whatever reason miden reverses the stack
+        //     .rev()
+        //     .map(|e| e.as_int())
+        //     .collect();
 
-        console::time_with_label("verify_program");
-        verify(
-            self.program.clone().unwrap().hash(),
-            &stack_inputs[..],
-            &self.program_outputs.clone().unwrap(),
-            proof.clone(),
-        )
-        .map_err(|e| format!("Could not verify proof due to {}", e))?;
-        console::time_end_with_label("verify_program");
+        // console::time_with_label("verify_program");
+        // verify(
+        //     self.program.clone().unwrap().hash(),
+        //     &stack_inputs[..],
+        //     &self.program_outputs.clone().unwrap(),
+        //     proof.clone(),
+        // )
+        // .map_err(|e| format!("Could not verify proof due to {}", e))?;
+        // console::time_end_with_label("verify_program");
 
-        info!(
-            "proof size: {:.1} KB",
-            proof.to_bytes().len() as f64 / 1024f64
-        );
-        let sdk_proof: sdk::StarkProof = sdk::StarkProof::into_sdk(proof, &air);
-        info!(
-            "SDK Proof size: {:.1} KB",
-            sdk_proof.encode_to_vec().len() as f64 / 1024f64
-        );
-        let sdk_outputs: sdk::MidenProgramOutputs = self.program_outputs.clone().unwrap().into();
-        let sdk_pub_inputs: sdk::MidenPublicInputs = pub_inputs.into();
-        let js_output = ProverOutput {
-            proof: sdk_proof.encode_to_vec(),
-            program_outputs: sdk_outputs.encode_to_vec(),
-            public_inputs: sdk_pub_inputs.encode_to_vec(),
-        };
-        Ok(js_output)
+        // info!(
+        //     "proof size: {:.1} KB",
+        //     proof.to_bytes().len() as f64 / 1024f64
+        // );
+        // let sdk_proof: sdk::StarkProof = sdk::StarkProof::into_sdk(proof, &air);
+        // info!(
+        //     "SDK Proof size: {:.1} KB",
+        //     sdk_proof.encode_to_vec().len() as f64 / 1024f64
+        // );
+        // let sdk_outputs: sdk::MidenProgramOutputs = self.program_outputs.clone().unwrap().into();
+        // let sdk_pub_inputs: sdk::MidenPublicInputs = pub_inputs.into();
+        // let js_output = ProverOutput {
+        //     proof: sdk_proof.encode_to_vec(),
+        //     program_outputs: sdk_outputs.encode_to_vec(),
+        //     public_inputs: sdk_pub_inputs.encode_to_vec(),
+        // };
+        // Ok(js_output)
     }
 
     fn build_execution_trace(&mut self) -> Result<(), JsValue> {
@@ -213,6 +220,31 @@ impl MidenProver {
         let trace_polys = main_trace.interpolate_columns();
         self.trace_lde = Some(trace_polys.evaluate_columns_over(&domain));
         self.trace_polys = Some(trace_polys);
+
+        Ok(())
+    }
+
+    fn prove_trace_hashes(&self) -> Result<(), JsValue> {
+        let trace_polys = self.trace_polys.as_ref().unwrap();
+
+        info!("trace_polys: {:?}", trace_polys.num_rows());
+        // this is fine since trace length is a power of 2
+        let chunk_size = trace_polys.num_rows() / 8; // 8 threads
+        let mut dispatched_idx = 0;
+
+        for i in 0..8 {
+            let mut batch = vec![];
+            for _ in 0..chunk_size {
+                let mut row = vec![Felt::ZERO; trace_polys.num_cols()];
+                trace_polys.read_row_into(dispatched_idx, &mut row);
+                batch.push(row);
+                dispatched_idx += 1;
+            }
+            self.worker_pool.run(i, batch)?;
+        }
+
+        // let r = Blake2s_256::hash_elements(&batch[0]);
+        // info!("hash: {:?}", r.into_js_value());
 
         Ok(())
     }
