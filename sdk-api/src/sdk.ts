@@ -1,8 +1,15 @@
-import { MidenProver } from "miden-wasm";
+import init, { MidenProver, ProverOutput, start } from "miden-wasm";
 import { MidenProgram, MidenProgramInputs } from "./proto-ts/miden_prover";
 import { StarkProof } from "./proto-ts/stark_proof";
 import { MidenProgramOutputs, MidenPublicInputs } from "./proto-ts/miden_vm";
 import { FieldExtension, HashFunction, PrimeField, ProofOptions } from "./proto-ts/context";
+
+var miden_prover: MidenProver = null;
+init().then(() => {
+    start();
+    miden_prover = new MidenProver();
+    console.log("finished sdk init");
+});
 
 export function prove(program: MidenProgram, inputs: MidenProgramInputs, options: ProofOptions = ProofOptions.fromJSON({
     numQueries: 27,
@@ -17,14 +24,35 @@ export function prove(program: MidenProgram, inputs: MidenProgramInputs, options
     let program_bytes = MidenProgram.encode(program).finish();
     let input_bytes = MidenProgramInputs.encode(inputs).finish();
     let option_bytes = ProofOptions.encode(options).finish();
-    let miden_prover = new MidenProver();
-    miden_prover.prove(program_bytes, input_bytes, option_bytes);
+    miden_prover.prove(program_bytes, input_bytes, option_bytes, 1024);
 
     // let proof = StarkProof.decode(proof_outputs.proof);
     // let outputs = MidenProgramOutputs.decode(proof_outputs.program_outputs);
     // let pub_inputs = MidenPublicInputs.decode(proof_outputs.public_inputs);
 
     // return [proof, outputs, pub_inputs];
+}
+
+export function prove_sequential(program: MidenProgram, inputs: MidenProgramInputs, options: ProofOptions = ProofOptions.fromJSON({
+    numQueries: 27,
+    blowupFactor: 8,
+    grindingFactor: 16,
+    hashFn: HashFunction.BLAKE2S,
+    fieldExtension: FieldExtension.NONE,
+    friFoldingFactor: 8,
+    friMaxRemainderSize: 256,
+    primeField: PrimeField.GOLDILOCKS,
+})): [StarkProof, MidenProgramOutputs, MidenPublicInputs] {
+    let program_bytes = MidenProgram.encode(program).finish();
+    let input_bytes = MidenProgramInputs.encode(inputs).finish();
+    let option_bytes = ProofOptions.encode(options).finish();
+    let proof_outputs = miden_prover.prove_sequential(program_bytes, input_bytes, option_bytes);
+
+    let proof = StarkProof.decode(proof_outputs.proof);
+    let outputs = MidenProgramOutputs.decode(proof_outputs.program_outputs);
+    let pub_inputs = MidenPublicInputs.decode(proof_outputs.public_inputs);
+
+    return [proof, outputs, pub_inputs];
 }
 
 export function uint8ArrayToU64LE(arr: Uint8Array): BigInt {

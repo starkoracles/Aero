@@ -8,8 +8,6 @@ use js_sys::Array;
 use js_sys::Reflect::{get, set};
 use log::info;
 use miden_air::{Felt, FieldElement};
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::Once;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
@@ -21,7 +19,7 @@ use winter_crypto::ElementHasher;
 
 #[wasm_bindgen]
 pub struct WorkerPool {
-    state: Rc<PoolState>,
+    state: PoolState,
 }
 
 #[inline]
@@ -34,34 +32,24 @@ fn set_once_logger() {
 }
 
 struct PoolState {
-    workers: RefCell<Vec<Worker>>,
+    workers: Vec<Worker>,
     callback: Closure<dyn FnMut(Event)>,
 }
 
 #[wasm_bindgen]
 impl WorkerPool {
-    /// Creates a new `WorkerPool` which immediately creates `initial` workers.
-    ///
-    /// The pool created here can be used over a long period of time, and it
-    /// will be initially primed with `initial` workers. Currently workers are
-    /// never released or gc'd until the whole pool is destroyed.
-    ///
-    /// # Errors
-    ///
-    /// Returns any error that may happen while a JS web worker is created and a
-    /// message is sent to it.
     #[wasm_bindgen(constructor)]
-    pub fn new(initial: usize) -> Result<WorkerPool, JsValue> {
-        let pool = WorkerPool {
-            state: Rc::new(PoolState {
-                workers: RefCell::new(Vec::with_capacity(initial)),
+    pub fn new(concurrency: usize) -> Result<WorkerPool, JsValue> {
+        let mut pool = WorkerPool {
+            state: PoolState {
+                workers: Vec::with_capacity(concurrency),
                 callback: Closure::new(|event: Event| {
                     console_log!("unhandled event: {}", event.type_());
                     crate::logv(&event);
                 }),
-            }),
+            },
         };
-        for _ in 0..initial {
+        for _ in 0..concurrency {
             let worker = pool.spawn()?;
             pool.state.push(worker);
         }
@@ -91,37 +79,15 @@ impl WorkerPool {
         Ok(worker)
     }
 
-    /// Fetches a worker from this pool, spawning one if necessary.
-    ///
-    /// This will attempt to pull an already-spawned web worker from our cache
-    /// if one is available, otherwise it will spawn a new worker and return the
-    /// newly spawned worker.
-    ///
-    /// # Errors
-    ///
-    /// Returns any error that may happen while a JS web worker is created and a
-    /// message is sent to it.
-    fn worker(&self) -> Result<Worker, JsValue> {
-        match self.state.workers.borrow_mut().pop() {
-            Some(worker) => Ok(worker),
-            None => self.spawn(),
-        }
+    fn worker(&self, worker_idx: usize) -> Result<&Worker, JsValue> {
+        let worker = &self.state.workers[worker_idx];
+        Ok(worker)
     }
 
-    /// Executes the work `f` in a web worker, spawning a web worker if
-    /// necessary.
-    ///
-    /// This will acquire a web worker and then send the closure `f` to the
-    /// worker to execute. The worker won't be usable for anything else while
-    /// `f` is executing, and no callbacks are registered for when the worker
-    /// finishes.
-    ///
-    /// # Errors
-    ///
-    /// Returns any error that may happen while a JS web worker is created and a
-    /// message is sent to it.
-    fn execute(&self, batch_idx: usize, elements_table: Vec<Vec<Felt>>) -> Result<Worker, JsValue> {
-        let worker = self.worker()?;
+    fn execute(&self, batch_idx: usize, elements_table: Vec<Vec<Felt>>) -> Result<(), JsValue> {
+        let worker_idx = batch_idx % self.state.concurrency();
+        console_log!("running on worker idx: {}", worker_idx);
+        let worker = self.worker(worker_idx)?;
 
         let arg: Array = elements_table
             .iter()
@@ -129,48 +95,29 @@ impl WorkerPool {
             .collect::<Array>();
 
         let object = js_sys::Object::new();
-        set(&object, &"batch_idx".into(), &JsValue::from(batch_idx));
-        set(&object, &"elements_table".into(), &arg);
+        set(&object, &"batch_idx".into(), &JsValue::from(batch_idx))?;
+        set(&object, &"elements_table".into(), &arg)?;
 
-        match worker.post_message(&object) {
-            Ok(()) => Ok(worker),
-            Err(e) => Err(e),
-        }
+        worker.post_message(&object)?;
+        Ok(())
     }
 }
 
 impl WorkerPool {
-    /// Executes `f` in a web worker.
-    ///
-    /// This pool manages a set of web workers to draw from, and `f` will be
-    /// spawned quickly into one if the worker is idle. If no idle workers are
-    /// available then a new web worker will be spawned.
-    ///
-    /// Once `f` returns the worker assigned to `f` is automatically reclaimed
-    /// by this `WorkerPool`. This method provides no method of learning when
-    /// `f` completes, and for that you'll need to use `run_notify`.
-    ///
-    /// # Errors
-    ///
-    /// If an error happens while spawning a web worker or sending a message to
-    /// a web worker, that error is returned.
     pub fn run(&self, batch_idx: usize, elements_table: Vec<Vec<Felt>>) -> Result<(), JsValue> {
-        let worker = self.execute(batch_idx, elements_table)?;
-        self.state.push(worker);
+        self.execute(batch_idx, elements_table)?;
         Ok(())
     }
 }
 
 impl PoolState {
-    fn push(&self, worker: Worker) {
+    fn push(&mut self, worker: Worker) {
         worker.set_onerror(Some(self.callback.as_ref().unchecked_ref()));
-        let mut workers = self.workers.borrow_mut();
-        for prev in workers.iter() {
-            let prev: &JsValue = prev;
-            let worker: &JsValue = &worker;
-            assert!(prev != worker);
-        }
-        workers.push(worker);
+        self.workers.push(worker);
+    }
+
+    fn concurrency(&self) -> usize {
+        self.workers.len()
     }
 }
 
