@@ -1,19 +1,31 @@
 #![feature(once_cell)]
 
-use js_sys::Array;
+use futures::{executor::block_on, Future, FutureExt};
+use js_sys::Reflect::get;
 use log::info;
-use miden::{verify, ExecutionTrace, Program, ProgramInputs, ProofOptions, StarkProof};
+use miden::{
+    verify, Digest as MidenDigest, ExecutionTrace, Program, ProgramInputs, ProofOptions, StarkProof,
+};
 use miden_air::{Felt, FieldElement, ProcessorAir, PublicInputs, StarkField};
 use miden_core::ProgramOutputs;
 use miden_prover::ExecutionProver;
 use pool::WorkerPool;
 use prost::Message;
-use std::sync::Once;
+use std::{
+    cell::RefCell,
+    pin::Pin,
+    rc::Rc,
+    sync::Once,
+    task::{Context, Poll},
+};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
-use web_sys::console;
+use web_sys::{
+    console::{self, info},
+    MessageEvent,
+};
 use winter_air::Air;
-use winter_crypto::hashers::Blake2s_256;
+use winter_crypto::{hashers::Blake2s_256, ByteDigest, Digest, MerkleTree};
 use winter_prover::{Matrix, Prover, ProverChannel, Serializable, StarkDomain, Trace};
 
 pub mod convert;
@@ -50,6 +62,44 @@ pub fn start() -> Result<(), JsValue> {
     Ok(())
 }
 
+struct ResolvableFuture<T> {
+    result: Rc<RefCell<Vec<T>>>,
+    exepected_size: usize,
+}
+
+impl<T> Future for ResolvableFuture<T> {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let cur_len = (*self.result).borrow();
+        info!(
+            "data len: {}, expected_size: {}",
+            cur_len.len(),
+            self.exepected_size
+        );
+        if cur_len.len() == self.exepected_size {
+            info!("resolved future");
+            return Poll::Ready(());
+        } else {
+            // wait every second
+            let wait_fn = {
+                let waker = Rc::new(cx.waker().clone());
+                Closure::wrap(Box::new(move || {
+                    waker.as_ref().clone().wake();
+                }) as Box<dyn Fn()>)
+            };
+            let _ = web_sys::window()
+                .unwrap()
+                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                    wait_fn.as_ref().unchecked_ref(),
+                    100,
+                );
+            wait_fn.forget();
+            return Poll::Pending;
+        }
+    }
+}
+
 #[wasm_bindgen]
 pub struct MidenProver {
     trace: Option<ExecutionTrace>,
@@ -61,6 +111,8 @@ pub struct MidenProver {
     trace_polys: Option<Matrix<Felt>>,
     trace_lde: Option<Matrix<Felt>>,
     worker_pool: WorkerPool,
+    trace_row_hashes: Rc<RefCell<Vec<(usize, Vec<ByteDigest<32>>)>>>,
+    chunk_size: Option<usize>,
 }
 
 #[wasm_bindgen]
@@ -77,11 +129,13 @@ impl MidenProver {
             trace_polys: None,
             trace_lde: None,
             worker_pool: WorkerPool::new(8)?,
+            trace_row_hashes: Rc::new(RefCell::new(Vec::new())),
+            chunk_size: None,
         })
     }
 
     #[wasm_bindgen]
-    pub fn prove(
+    pub async fn prove(
         &mut self,
         program: Vec<u8>,
         program_inputs: Vec<u8>,
@@ -110,8 +164,21 @@ impl MidenProver {
         self.prove_stage_1()?;
         console::time_end_with_label("prove_program_stage1");
         console::time_with_label("prove_trace_hashes");
-        self.prove_trace_hashes(chunk_size)?;
+        self.prove_trace_hashes(chunk_size).await?;
         console::time_end_with_label("prove_trace_hashes");
+        // build Merkle tree out of hashed rows
+        let mut trace_row_hashes = vec![];
+
+        self.trace_row_hashes.borrow_mut().sort_by_key(|v| v.0);
+
+        // Append the vecs to the result vec in order
+        for (_, vec) in self.trace_row_hashes.borrow().iter() {
+            trace_row_hashes.extend(vec.clone());
+        }
+
+        let r: MerkleTree<Blake2s_256<Felt>> =
+            MerkleTree::new(trace_row_hashes).expect("failed to construct trace Merkle tree");
+        info!("Merkle root: {:?}", r.root().into_js_value());
         Ok(())
         // let proof = self.prove_full()?;
         // console::time_end_with_label("prove_program");
@@ -222,15 +289,17 @@ impl MidenProver {
         Ok(())
     }
 
-    fn prove_trace_hashes(&self, chunk_size: usize) -> Result<(), JsValue> {
+    async fn prove_trace_hashes(&mut self, chunk_size: usize) -> Result<(), JsValue> {
         let trace_polys = self.trace_polys.as_ref().unwrap();
 
         info!("trace_polys: {:?}", trace_polys.num_rows());
+        self.trace_row_hashes = Rc::new(RefCell::new(vec![]));
+        self.chunk_size = Some(chunk_size);
         // this is fine since trace length is a power of 2
-        let batches = trace_polys.num_rows() / chunk_size;
+        let num_of_batches = trace_polys.num_rows() / chunk_size;
         let mut dispatched_idx = 0;
 
-        for i in 0..batches {
+        for i in 0..num_of_batches {
             let mut batch = vec![];
             for _ in 0..chunk_size {
                 let mut row = vec![Felt::ZERO; trace_polys.num_cols()];
@@ -238,11 +307,15 @@ impl MidenProver {
                 batch.push(row);
                 dispatched_idx += 1;
             }
-            self.worker_pool.run(i, batch)?;
+            self.worker_pool.run(i, batch, self.get_on_msg_callback())?;
         }
+        // await all messages to process
+        let fut = ResolvableFuture {
+            result: self.trace_row_hashes.clone(),
+            exepected_size: num_of_batches,
+        };
 
-        // let r = Blake2s_256::hash_elements(&batch[0]);
-        // info!("hash: {:?}", r.into_js_value());
+        fut.await;
 
         Ok(())
     }
@@ -326,6 +399,34 @@ impl MidenProver {
             public_inputs: sdk_pub_inputs.encode_to_vec(),
         };
         Ok(js_output)
+    }
+
+    /// Create a closure to act on the message returned by the worker
+    fn get_on_msg_callback(&self) -> Closure<dyn FnMut(MessageEvent)> {
+        let v = self.trace_row_hashes.clone();
+        let chunk_size = self.chunk_size.unwrap();
+        let callback = Closure::new(move |event: MessageEvent| {
+            let obj: js_sys::Object = event.data().unchecked_into();
+            let hashes: js_sys::Array = get(&obj, &"elements_table".into())
+                .unwrap()
+                .unchecked_into();
+            let batch_idx: usize =
+                get(&obj, &"batch_idx".into()).unwrap().as_f64().unwrap() as usize;
+            info!("got event from worker, batch_idx: {}", batch_idx);
+            let mut trace_row_hashes = (*v).borrow_mut();
+            let mut batch_hashes = vec![];
+            for hash in hashes.iter() {
+                let s: ByteDigest<32> = ByteDigest::from_js_value(hash);
+                batch_hashes.push(s);
+            }
+            assert!(
+                batch_hashes.len() == chunk_size,
+                "batch hashes size is not equal to chunk size"
+            );
+            trace_row_hashes.push((batch_idx, batch_hashes));
+        });
+
+        callback
     }
 }
 

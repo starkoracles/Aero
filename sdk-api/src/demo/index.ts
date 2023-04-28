@@ -1,10 +1,11 @@
 import { prove, prove_sequential, uint8ArrayToU64LE } from "../sdk";
-import init, { start } from "miden-wasm";
 import { MidenProgram, MidenProgramInputs } from "../proto-ts/miden_prover";
 import "../hashing_worker";
 
+const FIB_NUM = 100;
+
 async function onPageLoad() {
-    document.querySelector("body").innerHTML = `<h1>Proving the 10th fib number!</h1><button id="run_proof">Run Proof</button><button id="run_proof_sequential">Run Proof sequential</button><h2 id="result"></h2>`;
+    document.querySelector("body").innerHTML = `<h1>Proving the ${FIB_NUM}th fib number!</h1><button id="run_proof">Run Proof</button><button id="run_proof_sequential">Run Proof sequential</button><h2 id="result"></h2>`;
     console.log("Hello!");
     document.addEventListener('DOMContentLoaded', function () {
         const button = document.getElementById('run_proof');
@@ -48,9 +49,9 @@ async function runProof() {
                       exec.fib_iter
                     end`
             });
-            let inputs = MidenProgramInputs.fromJSON({ stackInit: [1000], adviceTape: [] });
+            let inputs = MidenProgramInputs.fromJSON({ stackInit: [FIB_NUM], adviceTape: [] });
             // const [, outputs,] = prove(program, inputs);
-            prove(program, inputs);
+            await prove(program, inputs);
 
             // let result = uint8ArrayToU64LE(outputs.stack[0].element);
             let result = 111
@@ -89,7 +90,7 @@ async function runProofSequential() {
                       exec.fib_iter
                     end`
             });
-            let inputs = MidenProgramInputs.fromJSON({ stackInit: [1000], adviceTape: [] });
+            let inputs = MidenProgramInputs.fromJSON({ stackInit: [FIB_NUM], adviceTape: [] });
             const [, outputs,] = prove_sequential(program, inputs);
 
             let result = uint8ArrayToU64LE(outputs.stack[0].element);

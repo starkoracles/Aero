@@ -11,7 +11,7 @@ use miden_air::{Felt, FieldElement};
 use std::sync::Once;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
-use web_sys::DedicatedWorkerGlobalScope;
+use web_sys::{DedicatedWorkerGlobalScope, MessageEvent};
 use web_sys::{Event, Worker};
 use winter_crypto::hashers::Blake2s_256;
 use winter_crypto::Digest;
@@ -84,7 +84,12 @@ impl WorkerPool {
         Ok(worker)
     }
 
-    fn execute(&self, batch_idx: usize, elements_table: Vec<Vec<Felt>>) -> Result<(), JsValue> {
+    fn execute(
+        &self,
+        batch_idx: usize,
+        elements_table: Vec<Vec<Felt>>,
+        callback: Closure<dyn FnMut(MessageEvent)>,
+    ) -> Result<(), JsValue> {
         let worker_idx = batch_idx % self.state.concurrency();
         console_log!("running on worker idx: {}", worker_idx);
         let worker = self.worker(worker_idx)?;
@@ -99,13 +104,20 @@ impl WorkerPool {
         set(&object, &"elements_table".into(), &arg)?;
 
         worker.post_message(&object)?;
+        worker.set_onmessage(Some(callback.as_ref().unchecked_ref()));
+        callback.forget();
         Ok(())
     }
 }
 
 impl WorkerPool {
-    pub fn run(&self, batch_idx: usize, elements_table: Vec<Vec<Felt>>) -> Result<(), JsValue> {
-        self.execute(batch_idx, elements_table)?;
+    pub fn run(
+        &self,
+        batch_idx: usize,
+        elements_table: Vec<Vec<Felt>>,
+        callback: Closure<dyn FnMut(MessageEvent)>,
+    ) -> Result<(), JsValue> {
+        self.execute(batch_idx, elements_table, callback)?;
         Ok(())
     }
 }
@@ -126,12 +138,15 @@ impl PoolState {
 #[wasm_bindgen]
 pub fn child_entry_point(obj: js_sys::Object) -> Result<(), JsValue> {
     set_once_logger();
-    info!("child_entry_point");
     let global = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
     let element_table = get(&obj, &"elements_table".into())?.unchecked_into();
     let batch_idx: usize = get(&obj, &"batch_idx".into())?.as_f64().unwrap() as usize;
-    let result = blake2_hash_elements(batch_idx, element_table)?;
-    global.post_message(&result)?;
+    let hashes = blake2_hash_elements(batch_idx, element_table)?;
+
+    let object = js_sys::Object::new();
+    set(&object, &"batch_idx".into(), &JsValue::from(batch_idx))?;
+    set(&object, &"elements_table".into(), &hashes)?;
+    global.post_message(&object)?;
     Ok(())
 }
 
@@ -151,7 +166,6 @@ pub fn blake2_hash_elements(batch_idx: usize, element_table: Array) -> Result<Ar
         let r = Blake2s_256::hash_elements(row);
         hashes.push(&r.into_js_value());
     }
-    // info!("hashes: {:?}", hashes);
     info!("done processing hashes for batch {}", batch_idx);
 
     Ok(hashes)

@@ -11,7 +11,7 @@ init().then(() => {
     console.log("finished sdk init");
 });
 
-export function prove(program: MidenProgram, inputs: MidenProgramInputs, options: ProofOptions = ProofOptions.fromJSON({
+export async function prove(program: MidenProgram, inputs: MidenProgramInputs, options: ProofOptions = ProofOptions.fromJSON({
     numQueries: 27,
     blowupFactor: 8,
     grindingFactor: 16,
@@ -20,11 +20,11 @@ export function prove(program: MidenProgram, inputs: MidenProgramInputs, options
     friFoldingFactor: 8,
     friMaxRemainderSize: 256,
     primeField: PrimeField.GOLDILOCKS,
-})): void {
+})): Promise<void> {
     let program_bytes = MidenProgram.encode(program).finish();
     let input_bytes = MidenProgramInputs.encode(inputs).finish();
     let option_bytes = ProofOptions.encode(options).finish();
-    miden_prover.prove(program_bytes, input_bytes, option_bytes, 1024);
+    await miden_prover.prove(program_bytes, input_bytes, option_bytes, 1024);
 
     // let proof = StarkProof.decode(proof_outputs.proof);
     // let outputs = MidenProgramOutputs.decode(proof_outputs.program_outputs);
