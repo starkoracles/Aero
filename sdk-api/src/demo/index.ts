@@ -5,30 +5,30 @@ import "../hashing_worker";
 const FIB_NUM = 100;
 
 async function onPageLoad() {
-    document.querySelector("body").innerHTML = `<h1>Proving the ${FIB_NUM}th fib number!</h1><button id="run_proof">Run Proof</button><button id="run_proof_sequential">Run Proof sequential</button><h2 id="result"></h2>`;
-    console.log("Hello!");
-    document.addEventListener('DOMContentLoaded', function () {
-        const button = document.getElementById('run_proof');
+  document.querySelector("body").innerHTML = `<h1>Proving the ${FIB_NUM}th fib number!</h1><button id="run_proof">Run Proof</button><button id="run_proof_sequential">Run Proof sequential</button><h2 id="result"></h2>`;
+  console.log("Hello!");
+  document.addEventListener('DOMContentLoaded', function () {
+    const button = document.getElementById('run_proof');
 
-        button.addEventListener('click', async () => {
-            await runProof();
-        });
-
-        const button_seq = document.getElementById('run_proof_sequential');
-
-        button_seq.addEventListener('click', async () => {
-            await runProofSequential();
-        });
+    button.addEventListener('click', async () => {
+      await runProof();
     });
+
+    const button_seq = document.getElementById('run_proof_sequential');
+
+    button_seq.addEventListener('click', async () => {
+      await runProofSequential();
+    });
+  });
 }
 
 async function runProof() {
-    console.log("Running proof");
-    return new Promise<void>((resolve) => {
-        setTimeout(async () => {
-            let program = MidenProgram.fromJSON({
-                program:
-                    `
+  console.log("Running proof");
+  return new Promise<void>((resolve) => {
+    setTimeout(async () => {
+      let program = MidenProgram.fromJSON({
+        program:
+          `
                     # STACK EFFECT
                     # ITERATION-AMOUNT -- FIB-ANSWER #
                     proc.fib_iter
@@ -48,28 +48,28 @@ async function runProof() {
                     begin
                       exec.fib_iter
                     end`
-            });
-            let inputs = MidenProgramInputs.fromJSON({ stackInit: [FIB_NUM], adviceTape: [] });
-            // const [, outputs,] = prove(program, inputs);
-            await prove(program, inputs);
+      });
+      let inputs = MidenProgramInputs.fromJSON({ stackInit: [FIB_NUM], adviceTape: [] });
+      // const [, outputs,] = prove(program, inputs);
+      await prove(program, inputs);
 
-            // let result = uint8ArrayToU64LE(outputs.stack[0].element);
-            let result = 111
+      // let result = uint8ArrayToU64LE(outputs.stack[0].element);
+      let result = 111
 
-            document.getElementById("result").innerHTML = "Result: " + result.toString();
-            console.log("Result: ", result);
-            resolve();
-        }, 3000);
-    });
+      document.getElementById("result").innerHTML = "Result: " + result.toString();
+      console.log("Result: ", result);
+      resolve();
+    }, 3000);
+  });
 }
 
 async function runProofSequential() {
-    console.log("Running proof sequential");
-    return new Promise<void>((resolve) => {
-        setTimeout(async () => {
-            let program = MidenProgram.fromJSON({
-                program:
-                    `
+  console.log("Running proof sequential");
+  return new Promise<void>((resolve) => {
+    setTimeout(async () => {
+      let program = MidenProgram.fromJSON({
+        program:
+          `
                     # STACK EFFECT
                     # ITERATION-AMOUNT -- FIB-ANSWER #
                     proc.fib_iter
@@ -89,17 +89,17 @@ async function runProofSequential() {
                     begin
                       exec.fib_iter
                     end`
-            });
-            let inputs = MidenProgramInputs.fromJSON({ stackInit: [FIB_NUM], adviceTape: [] });
-            const [, outputs,] = prove_sequential(program, inputs);
+      });
+      let inputs = MidenProgramInputs.fromJSON({ stackInit: [FIB_NUM], adviceTape: [] });
+      const [, outputs,] = prove_sequential(program, inputs);
 
-            let result = uint8ArrayToU64LE(outputs.stack[0].element);
+      let result = uint8ArrayToU64LE(outputs.stack[0].element);
 
-            document.getElementById("result").innerHTML = "Result: " + result.toString();
-            console.log("Result: ", result);
-            resolve();
-        }, 3000);
-    });
+      document.getElementById("result").innerHTML = "Result: " + result.toString();
+      console.log("Result: ", result);
+      resolve();
+    }, 3000);
+  });
 }
 
 onPageLoad();

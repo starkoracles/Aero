@@ -72,13 +72,7 @@ impl<T> Future for ResolvableFuture<T> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let cur_len = (*self.result).borrow();
-        info!(
-            "data len: {}, expected_size: {}",
-            cur_len.len(),
-            self.exepected_size
-        );
         if cur_len.len() == self.exepected_size {
-            info!("resolved future");
             return Poll::Ready(());
         } else {
             // wait every second
@@ -290,20 +284,20 @@ impl MidenProver {
     }
 
     async fn prove_trace_hashes(&mut self, chunk_size: usize) -> Result<(), JsValue> {
-        let trace_polys = self.trace_polys.as_ref().unwrap();
+        let trace_lde = self.trace_lde.as_ref().unwrap();
 
-        info!("trace_polys: {:?}", trace_polys.num_rows());
+        info!("trace_lde: {:?}", trace_lde.num_rows());
         self.trace_row_hashes = Rc::new(RefCell::new(vec![]));
         self.chunk_size = Some(chunk_size);
         // this is fine since trace length is a power of 2
-        let num_of_batches = trace_polys.num_rows() / chunk_size;
+        let num_of_batches = trace_lde.num_rows() / chunk_size;
         let mut dispatched_idx = 0;
 
         for i in 0..num_of_batches {
             let mut batch = vec![];
             for _ in 0..chunk_size {
-                let mut row = vec![Felt::ZERO; trace_polys.num_cols()];
-                trace_polys.read_row_into(dispatched_idx, &mut row);
+                let mut row = vec![Felt::ZERO; trace_lde.num_cols()];
+                trace_lde.read_row_into(dispatched_idx, &mut row);
                 batch.push(row);
                 dispatched_idx += 1;
             }
