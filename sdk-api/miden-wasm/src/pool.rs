@@ -8,7 +8,7 @@ use js_sys::Reflect::set;
 use js_sys::{Array, Uint8Array};
 use log::debug;
 use miden_air::{Felt, StarkField};
-use serde::ser::{SerializeSeq, SerializeStruct};
+use serde::ser::SerializeSeq;
 use std::sync::Once;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
@@ -18,7 +18,7 @@ use winter_crypto::hashers::Blake2s_256;
 use winter_crypto::Digest;
 use winter_crypto::ElementHasher;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct WorkItem {
     pub data: Vec<VecWrapper>,
     pub batch_idx: usize,
@@ -68,42 +68,6 @@ impl<'de> serde::Deserialize<'de> for VecWrapper {
     }
 }
 
-impl serde::Serialize for WorkItem {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("WorkItem", 2)?;
-        state.serialize_field("data", &self.data)?;
-        state.serialize_field("batch_idx", &self.batch_idx)?;
-        state.end()
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for WorkItem {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct WorkItemVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for WorkItemVisitor {
-            type Value = WorkItem;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a work item")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
-                let data = seq.next_element::<Vec<VecWrapper>>()?.unwrap();
-                let batch_idx = seq.next_element::<usize>()?.unwrap();
-                Ok(WorkItem { data, batch_idx })
-            }
-        }
-        deserializer.deserialize_struct("WorkItem", &["data", "batch_idx"], WorkItemVisitor)
-    }
-}
-
 #[cfg(test)]
 mod work_item_test {
     use super::*;
@@ -115,10 +79,7 @@ mod work_item_test {
             VecWrapper(vec![Felt::from(3u64), Felt::from(4u64)]),
         ];
 
-        let work_item = WorkItem {
-            data: data,
-            batch_idx: 0,
-        };
+        let work_item = WorkItem { data, batch_idx: 0 };
         let serialized = bincode::serialize(&work_item).unwrap();
         let deserialized: WorkItem = bincode::deserialize(&serialized).unwrap();
         assert_eq!(work_item.data, deserialized.data);
@@ -147,7 +108,10 @@ struct PoolState {
 #[wasm_bindgen]
 impl WorkerPool {
     #[wasm_bindgen(constructor)]
-    pub fn new(concurrency: usize) -> Result<WorkerPool, JsValue> {
+    pub fn new() -> Result<WorkerPool, JsValue> {
+        let window = web_sys::window().unwrap();
+        let navigator = window.navigator();
+        let concurrency = (navigator.hardware_concurrency() as usize) * 1;
         let mut pool = WorkerPool {
             state: PoolState {
                 workers: Vec::with_capacity(concurrency),

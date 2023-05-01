@@ -119,7 +119,7 @@ impl MidenProver {
             channel: None,
             trace_polys: None,
             trace_lde: None,
-            worker_pool: WorkerPool::new(8)?,
+            worker_pool: WorkerPool::new()?,
             trace_row_hashes: Rc::new(RefCell::new(Vec::new())),
             chunk_size: None,
             prover: None,
