@@ -102,6 +102,8 @@ pub struct MidenProver {
     worker_pool: WorkerPool,
     trace_row_hashes: Rc<RefCell<Vec<(usize, Vec<ByteDigest<32>>)>>>,
     chunk_size: Option<usize>,
+    prover: Option<ExecutionProver>,
+    air: Option<ProcessorAir>,
 }
 
 #[wasm_bindgen]
@@ -120,6 +122,8 @@ impl MidenProver {
             worker_pool: WorkerPool::new(8)?,
             trace_row_hashes: Rc::new(RefCell::new(Vec::new())),
             chunk_size: None,
+            prover: None,
+            air: None,
         })
     }
 
@@ -130,7 +134,7 @@ impl MidenProver {
         program_inputs: Vec<u8>,
         proof_options: Vec<u8>,
         chunk_size: usize,
-    ) -> Result<(), JsValue> {
+    ) -> Result<ProverOutput, JsValue> {
         console::time_with_label("preparing_inputs");
         let miden_program =
             sdk::MidenProgram::decode(&program[..]).expect("Cannot decode miden program");
@@ -165,62 +169,78 @@ impl MidenProver {
             trace_row_hashes.extend(vec.clone());
         }
 
-        let r: MerkleTree<Blake2s_256<Felt>> =
+        let main_trace_tree: MerkleTree<Blake2s_256<Felt>> =
             MerkleTree::new(trace_row_hashes).expect("failed to construct trace Merkle tree");
-        info!("Merkle root: {:?}", r.root().into_js_value());
-        Ok(())
-        // let proof = self.prove_full()?;
-        // console::time_end_with_label("prove_program");
+        info!("Merkle root: {:?}", main_trace_tree.root().into_js_value());
 
-        // let pub_inputs = PublicInputs::new(
-        //     self.program.clone().unwrap().hash(),
-        //     self.program_inputs.clone().unwrap().stack_init().to_vec(),
-        //     self.program_outputs.clone().unwrap(),
-        // );
-        // let air = ProcessorAir::new(
-        //     proof.get_trace_info(),
-        //     pub_inputs.clone(),
-        //     proof.options().clone(),
-        // );
+        let prover = ExecutionProver::new(
+            self.proof_options.clone().unwrap(),
+            self.program_inputs.clone().unwrap().stack_init().to_vec(),
+            self.program_outputs.clone().unwrap(),
+        );
+        console::time_with_label("prove_final_stage");
+        let channel_unpacked = self.channel.take().unwrap();
+        let proof = prover
+            .prove_after_build_trace_commitment(
+                self.air.clone().unwrap(),
+                channel_unpacked,
+                main_trace_tree,
+                self.trace_lde.take().unwrap(),
+                self.trace_polys.take().unwrap(),
+                self.trace.take().unwrap(),
+            )
+            .map_err(|err| format!("Cannot run prove_after_build_trace_commitment: {:?}", err))?;
+        console::time_end_with_label("prove_final_stage");
 
-        // let stack_inputs: Vec<u64> = self
-        //     .program_inputs
-        //     .clone()
-        //     .unwrap()
-        //     .stack_init()
-        //     .iter()
-        //     // for whatever reason miden reverses the stack
-        //     .rev()
-        //     .map(|e| e.as_int())
-        //     .collect();
+        let pub_inputs = PublicInputs::new(
+            self.program.clone().unwrap().hash(),
+            self.program_inputs.clone().unwrap().stack_init().to_vec(),
+            self.program_outputs.clone().unwrap(),
+        );
+        let air = ProcessorAir::new(
+            proof.get_trace_info(),
+            pub_inputs.clone(),
+            proof.options().clone(),
+        );
 
-        // console::time_with_label("verify_program");
-        // verify(
-        //     self.program.clone().unwrap().hash(),
-        //     &stack_inputs[..],
-        //     &self.program_outputs.clone().unwrap(),
-        //     proof.clone(),
-        // )
-        // .map_err(|e| format!("Could not verify proof due to {}", e))?;
-        // console::time_end_with_label("verify_program");
+        let stack_inputs: Vec<u64> = self
+            .program_inputs
+            .clone()
+            .unwrap()
+            .stack_init()
+            .iter()
+            // for whatever reason miden reverses the stack
+            .rev()
+            .map(|e| e.as_int())
+            .collect();
 
-        // info!(
-        //     "proof size: {:.1} KB",
-        //     proof.to_bytes().len() as f64 / 1024f64
-        // );
-        // let sdk_proof: sdk::StarkProof = sdk::StarkProof::into_sdk(proof, &air);
-        // info!(
-        //     "SDK Proof size: {:.1} KB",
-        //     sdk_proof.encode_to_vec().len() as f64 / 1024f64
-        // );
-        // let sdk_outputs: sdk::MidenProgramOutputs = self.program_outputs.clone().unwrap().into();
-        // let sdk_pub_inputs: sdk::MidenPublicInputs = pub_inputs.into();
-        // let js_output = ProverOutput {
-        //     proof: sdk_proof.encode_to_vec(),
-        //     program_outputs: sdk_outputs.encode_to_vec(),
-        //     public_inputs: sdk_pub_inputs.encode_to_vec(),
-        // };
-        // Ok(js_output)
+        console::time_with_label("verify_program");
+        verify(
+            self.program.clone().unwrap().hash(),
+            &stack_inputs[..],
+            &self.program_outputs.clone().unwrap(),
+            proof.clone(),
+        )
+        .map_err(|e| format!("Could not verify proof due to {}", e))?;
+        console::time_end_with_label("verify_program");
+
+        info!(
+            "proof size: {:.1} KB",
+            proof.to_bytes().len() as f64 / 1024f64
+        );
+        let sdk_proof: sdk::StarkProof = sdk::StarkProof::into_sdk(proof, &air);
+        info!(
+            "SDK Proof size: {:.1} KB",
+            sdk_proof.encode_to_vec().len() as f64 / 1024f64
+        );
+        let sdk_outputs: sdk::MidenProgramOutputs = self.program_outputs.clone().unwrap().into();
+        let sdk_pub_inputs: sdk::MidenPublicInputs = pub_inputs.into();
+        let js_output = ProverOutput {
+            proof: sdk_proof.encode_to_vec(),
+            program_outputs: sdk_outputs.encode_to_vec(),
+            public_inputs: sdk_pub_inputs.encode_to_vec(),
+        };
+        Ok(js_output)
     }
 
     fn build_execution_trace(&mut self) -> Result<(), JsValue> {
@@ -237,27 +257,27 @@ impl MidenProver {
     // start the proving process, generate the main trace
     // before commitment will be dispatched to workers
     fn prove_stage_1(&mut self) -> Result<(), JsValue> {
-        let prover = ExecutionProver::new(
+        self.prover = Some(ExecutionProver::new(
             self.proof_options.clone().unwrap(),
             self.program_inputs.clone().unwrap().stack_init().to_vec(),
             self.program_outputs.clone().unwrap(),
-        );
+        ));
         let trace = self.trace.clone().unwrap();
         // 0 ----- instantiate AIR and prover channel ---------------------------------------------
 
         // serialize public inputs; these will be included in the seed for the public coin
-        let pub_inputs = prover.get_pub_inputs(&trace);
+        let pub_inputs = self.prover.as_ref().unwrap().get_pub_inputs(&trace);
         let mut pub_inputs_bytes = Vec::new();
         pub_inputs.write_into(&mut pub_inputs_bytes);
 
         // create an instance of AIR for the provided parameters. this takes a generic description
         // of the computation (provided via AIR type), and creates a description of a specific
         // execution of the computation for the provided public inputs.
-        let air: ProcessorAir = ProcessorAir::new(
+        self.air = Some(ProcessorAir::new(
             trace.get_info(),
             pub_inputs,
             self.proof_options.clone().unwrap().0,
-        );
+        ));
 
         // create a channel which is used to simulate interaction between the prover and the
         // verifier; the channel will be used to commit to values and to draw randomness that
@@ -266,10 +286,10 @@ impl MidenProver {
             <ExecutionProver as Prover>::Air,
             Felt,
             Blake2s_256<Felt>,
-        >::new(air.clone(), pub_inputs_bytes));
+        >::new(self.air.clone().unwrap(), pub_inputs_bytes));
 
         // start building the trace commitments
-        let domain = StarkDomain::new(&air);
+        let domain = StarkDomain::new(&self.air.clone().unwrap());
         let main_trace = trace.main_segment();
         let trace_polys = main_trace.interpolate_columns();
         self.trace_lde = Some(trace_polys.evaluate_columns_over(&domain));

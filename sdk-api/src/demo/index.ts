@@ -24,8 +24,10 @@ async function onPageLoad() {
 
 async function runProof() {
   console.log("Running proof");
+  console.time("running_proof");
   return new Promise<void>((resolve) => {
     setTimeout(async () => {
+      console.log("in proof");
       let program = MidenProgram.fromJSON({
         program:
           `
@@ -50,21 +52,21 @@ async function runProof() {
                     end`
       });
       let inputs = MidenProgramInputs.fromJSON({ stackInit: [FIB_NUM], adviceTape: [] });
-      // const [, outputs,] = prove(program, inputs);
-      await prove(program, inputs);
+      const [, outputs,] = await prove(program, inputs);
 
-      // let result = uint8ArrayToU64LE(outputs.stack[0].element);
-      let result = 111
+      let result = uint8ArrayToU64LE(outputs.stack[0].element);
 
       document.getElementById("result").innerHTML = "Result: " + result.toString();
       console.log("Result: ", result);
+      console.timeEnd("running_proof");
       resolve();
-    }, 3000);
+    });
   });
 }
 
 async function runProofSequential() {
   console.log("Running proof sequential");
+  console.time("running_proof_sequential");
   return new Promise<void>((resolve) => {
     setTimeout(async () => {
       let program = MidenProgram.fromJSON({
@@ -97,8 +99,9 @@ async function runProofSequential() {
 
       document.getElementById("result").innerHTML = "Result: " + result.toString();
       console.log("Result: ", result);
+      console.timeEnd("running_proof_sequential");
       resolve();
-    }, 3000);
+    });
   });
 }
 
