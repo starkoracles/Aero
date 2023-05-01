@@ -4,10 +4,11 @@
 
 //! A small module that's intended to provide an example of creating a pool of
 //! web workers which can be used to execute `rayon`-style work.
-use js_sys::Array;
-use js_sys::Reflect::{get, set};
-use log::info;
-use miden_air::{Felt, FieldElement};
+use js_sys::Reflect::set;
+use js_sys::{Array, Uint8Array};
+use log::debug;
+use miden_air::{Felt, StarkField};
+use serde::ser::{SerializeSeq, SerializeStruct};
 use std::sync::Once;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
@@ -16,6 +17,113 @@ use web_sys::{Event, Worker};
 use winter_crypto::hashers::Blake2s_256;
 use winter_crypto::Digest;
 use winter_crypto::ElementHasher;
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct WorkItem {
+    pub data: Vec<VecWrapper>,
+    pub batch_idx: usize,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct VecWrapper(pub Vec<Felt>);
+
+impl serde::Serialize for VecWrapper {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
+        self.0
+            .iter()
+            .map(|e| e.as_int())
+            .for_each(|e| seq.serialize_element(&e).unwrap());
+        seq.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for VecWrapper {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct VecWrapperVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for VecWrapperVisitor {
+            type Value = VecWrapper;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a vector of bytes")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut vec = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+                while let Some(e) = seq.next_element::<u64>()? {
+                    vec.push(Felt::new(e));
+                }
+                Ok(VecWrapper(vec))
+            }
+        }
+
+        deserializer.deserialize_seq(VecWrapperVisitor)
+    }
+}
+
+impl serde::Serialize for WorkItem {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("WorkItem", 2)?;
+        state.serialize_field("data", &self.data)?;
+        state.serialize_field("batch_idx", &self.batch_idx)?;
+        state.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for WorkItem {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct WorkItemVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for WorkItemVisitor {
+            type Value = WorkItem;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a work item")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let data = seq.next_element::<Vec<VecWrapper>>()?.unwrap();
+                let batch_idx = seq.next_element::<usize>()?.unwrap();
+                Ok(WorkItem { data, batch_idx })
+            }
+        }
+        deserializer.deserialize_struct("WorkItem", &["data", "batch_idx"], WorkItemVisitor)
+    }
+}
+
+#[cfg(test)]
+mod work_item_test {
+    use super::*;
+
+    #[test]
+    fn test_work_item_serialization() {
+        let data = vec![
+            VecWrapper(vec![Felt::from(1u64), Felt::from(2u64)]),
+            VecWrapper(vec![Felt::from(3u64), Felt::from(4u64)]),
+        ];
+
+        let work_item = WorkItem {
+            data: data,
+            batch_idx: 0,
+        };
+        let serialized = bincode::serialize(&work_item).unwrap();
+        let deserialized: WorkItem = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(work_item.data, deserialized.data);
+    }
+}
 
 #[wasm_bindgen]
 pub struct WorkerPool {
@@ -87,23 +195,23 @@ impl WorkerPool {
     fn execute(
         &self,
         batch_idx: usize,
-        elements_table: Vec<Vec<Felt>>,
+        elements_table: Vec<VecWrapper>,
         callback: Closure<dyn FnMut(MessageEvent)>,
     ) -> Result<(), JsValue> {
         let worker_idx = batch_idx % self.state.concurrency();
-        console_log!("running on worker idx: {}", worker_idx);
+        debug!("running on worker idx: {}", worker_idx);
         let worker = self.worker(worker_idx)?;
 
-        let arg: Array = elements_table
-            .iter()
-            .map(|r| r.iter().map(|e| e.into_js_value()).collect::<Array>())
-            .collect::<Array>();
+        let work_item = WorkItem {
+            data: elements_table,
+            batch_idx,
+        };
 
-        let object = js_sys::Object::new();
-        set(&object, &"batch_idx".into(), &JsValue::from(batch_idx))?;
-        set(&object, &"elements_table".into(), &arg)?;
+        let work_item_bytes = bincode::serialize(&work_item)
+            .map_err(|err| format!("Failed to convert work_item_bytes - {:?}", err))?;
+        let uint8array = Uint8Array::from(&work_item_bytes[..]);
 
-        worker.post_message(&object)?;
+        worker.post_message(&uint8array)?;
         worker.set_onmessage(Some(callback.as_ref().unchecked_ref()));
         callback.forget();
         Ok(())
@@ -114,7 +222,7 @@ impl WorkerPool {
     pub fn run(
         &self,
         batch_idx: usize,
-        elements_table: Vec<Vec<Felt>>,
+        elements_table: Vec<VecWrapper>,
         callback: Closure<dyn FnMut(MessageEvent)>,
     ) -> Result<(), JsValue> {
         self.execute(batch_idx, elements_table, callback)?;
@@ -136,37 +244,32 @@ impl PoolState {
 /// Entry point invoked by `worker.js`, a bit of a hack but see the "TODO" above
 /// about `worker.js` in general.
 #[wasm_bindgen]
-pub fn child_entry_point(obj: js_sys::Object) -> Result<(), JsValue> {
+pub fn child_entry_point(data_array: Uint8Array) -> Result<(), JsValue> {
     set_once_logger();
     let global = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
-    let element_table = get(&obj, &"elements_table".into())?.unchecked_into();
-    let batch_idx: usize = get(&obj, &"batch_idx".into())?.as_f64().unwrap() as usize;
-    let hashes = blake2_hash_elements(batch_idx, element_table)?;
 
+    let data = data_array.to_vec();
+    let work_item: WorkItem = bincode::deserialize(&data)
+        .map_err(|err| format!("Could not deserialize work item: {:?}", err))?;
+    let hashes = blake2_hash_elements(&work_item)?;
     let object = js_sys::Object::new();
-    set(&object, &"batch_idx".into(), &JsValue::from(batch_idx))?;
+    set(
+        &object,
+        &"batch_idx".into(),
+        &JsValue::from(work_item.batch_idx),
+    )?;
     set(&object, &"elements_table".into(), &hashes)?;
     global.post_message(&object)?;
     Ok(())
 }
 
-pub fn blake2_hash_elements(batch_idx: usize, element_table: Array) -> Result<Array, JsValue> {
-    // we expect a 2d Array of JsValues that would translate into Felts
-    let mut converted_table: Vec<Vec<Felt>> = vec![];
-    for (i, row) in element_table.iter().enumerate() {
-        let row_array = row.dyn_into::<Array>()?;
-        converted_table.push(vec![]);
-        for column in row_array.iter() {
-            let element = Felt::from_js_value(column);
-            converted_table[i].push(element);
-        }
-    }
+pub fn blake2_hash_elements(work_item: &WorkItem) -> Result<Array, JsValue> {
     let hashes = Array::new();
-    for row in converted_table.iter() {
-        let r = Blake2s_256::hash_elements(row);
+    for row in work_item.data.iter() {
+        let r = Blake2s_256::hash_elements(&row.0[..]);
         hashes.push(&r.into_js_value());
     }
-    info!("done processing hashes for batch {}", batch_idx);
+    debug!("done processing hashes for batch {}", work_item.batch_idx);
 
     Ok(hashes)
 }

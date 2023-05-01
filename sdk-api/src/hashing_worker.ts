@@ -13,7 +13,6 @@ self.onmessage = event => {
     });
 
     self.onmessage = async event => {
-        console.log('executing work on worker', event.data)
         // This will queue further commands up until the module is fully initialised:
         await initialised;
         child_entry_point(event.data);

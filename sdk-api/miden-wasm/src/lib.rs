@@ -1,11 +1,9 @@
 #![feature(once_cell)]
 
-use futures::{executor::block_on, Future, FutureExt};
+use futures::Future;
 use js_sys::Reflect::get;
-use log::info;
-use miden::{
-    verify, Digest as MidenDigest, ExecutionTrace, Program, ProgramInputs, ProofOptions, StarkProof,
-};
+use log::{debug, info};
+use miden::{verify, ExecutionTrace, Program, ProgramInputs, ProofOptions, StarkProof};
 use miden_air::{Felt, FieldElement, ProcessorAir, PublicInputs, StarkField};
 use miden_core::ProgramOutputs;
 use miden_prover::ExecutionProver;
@@ -20,10 +18,7 @@ use std::{
 };
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
-use web_sys::{
-    console::{self, info},
-    MessageEvent,
-};
+use web_sys::{console, MessageEvent};
 use winter_air::Air;
 use winter_crypto::{hashers::Blake2s_256, ByteDigest, Digest, MerkleTree};
 use winter_prover::{Matrix, Prover, ProverChannel, Serializable, StarkDomain, Trace};
@@ -44,7 +39,7 @@ extern "C" {
     fn logv(x: &JsValue);
 }
 
-use crate::convert::sdk::sdk;
+use crate::{convert::sdk::sdk, pool::VecWrapper};
 use convert::convert_proof::*;
 
 #[wasm_bindgen(getter_with_clone)]
@@ -86,7 +81,7 @@ impl<T> Future for ResolvableFuture<T> {
                 .unwrap()
                 .set_timeout_with_callback_and_timeout_and_arguments_0(
                     wait_fn.as_ref().unchecked_ref(),
-                    100,
+                    200,
                 );
             wait_fn.forget();
             return Poll::Pending;
@@ -296,8 +291,8 @@ impl MidenProver {
         for i in 0..num_of_batches {
             let mut batch = vec![];
             for _ in 0..chunk_size {
-                let mut row = vec![Felt::ZERO; trace_lde.num_cols()];
-                trace_lde.read_row_into(dispatched_idx, &mut row);
+                let mut row = VecWrapper(vec![Felt::ZERO; trace_lde.num_cols()]);
+                trace_lde.read_row_into(dispatched_idx, &mut row.0);
                 batch.push(row);
                 dispatched_idx += 1;
             }
@@ -406,7 +401,7 @@ impl MidenProver {
                 .unchecked_into();
             let batch_idx: usize =
                 get(&obj, &"batch_idx".into()).unwrap().as_f64().unwrap() as usize;
-            info!("got event from worker, batch_idx: {}", batch_idx);
+            debug!("got event from worker, batch_idx: {}", batch_idx);
             let mut trace_row_hashes = (*v).borrow_mut();
             let mut batch_hashes = vec![];
             for hash in hashes.iter() {
