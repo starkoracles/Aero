@@ -3,6 +3,8 @@ import { MidenProgram, MidenProgramInputs } from "./proto-ts/miden_prover";
 import { StarkProof } from "./proto-ts/stark_proof";
 import { MidenProgramOutputs, MidenPublicInputs } from "./proto-ts/miden_vm";
 import { FieldExtension, HashFunction, PrimeField, ProofOptions } from "./proto-ts/context";
+import "./hashing_worker";
+import "./proving_worker";
 
 var miden_prover: MidenProver = null;
 init().then(() => {

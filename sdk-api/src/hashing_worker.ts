@@ -2,7 +2,7 @@ import init from "miden-wasm";
 import { hashing_entry_point } from "miden-wasm";
 
 self.onmessage = event => {
-    console.log("Worker received init:", event.data);
+    console.debug("Hashing received init:", event.data);
     let initialised = init().catch(err => {
         // Propagate to main `onerror`:
         setTimeout(() => {

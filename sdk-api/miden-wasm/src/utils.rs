@@ -7,26 +7,6 @@ use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub enum WorkerJobPayload {
-    HashingWorkItem(HashingWorkItem),
-    ProvingWorkItem(ProvingWorkItem),
-    HashingResult(HashingResult),
-    ProvingResult(ProverOutput),
-}
-
-impl WorkerJobPayload {
-    pub fn to_uint8array(&self) -> Uint8Array {
-        let serialized = bincode::serialize(self).unwrap();
-        Uint8Array::from(serialized.as_slice())
-    }
-
-    pub fn from_uint8array(data: Uint8Array) -> Self {
-        let bytes = data.to_vec();
-        bincode::deserialize(bytes.as_slice()).unwrap()
-    }
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProvingWorkItem {
     pub program: Vec<u8>,
     pub program_inputs: Vec<u8>,
@@ -85,24 +65,6 @@ impl<'de> serde::Deserialize<'de> for VecWrapper {
     }
 }
 
-#[cfg(test)]
-mod work_item_test {
-    use super::*;
-
-    #[test]
-    fn test_work_item_serialization() {
-        let data = vec![
-            VecWrapper(vec![Felt::from(1u64), Felt::from(2u64)]),
-            VecWrapper(vec![Felt::from(3u64), Felt::from(4u64)]),
-        ];
-
-        let work_item = HashingWorkItem { data, batch_idx: 0 };
-        let serialized = bincode::serialize(&work_item).unwrap();
-        let deserialized: HashingWorkItem = bincode::deserialize(&serialized).unwrap();
-        assert_eq!(work_item.data, deserialized.data);
-    }
-}
-
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct HashingResult {
     pub batch_idx: usize,
@@ -123,6 +85,34 @@ pub fn set_once_logger() {
     SET_SINGLETONS.call_once(|| {
         console_error_panic_hook::set_once();
         log::set_logger(&DEFAULT_LOGGER).unwrap();
-        log::set_max_level(log::LevelFilter::Debug);
+        log::set_max_level(log::LevelFilter::Info);
     });
+}
+
+pub fn to_uint8array<T: serde::Serialize>(data: &T) -> Uint8Array {
+    let serialized = bincode::serialize(data).unwrap();
+    Uint8Array::from(serialized.as_slice())
+}
+
+pub fn from_uint8array<T: serde::de::DeserializeOwned>(data: &Uint8Array) -> T {
+    let bytes = data.to_vec();
+    bincode::deserialize(bytes.as_slice()).unwrap()
+}
+
+#[cfg(test)]
+mod work_item_test {
+    use super::*;
+
+    #[test]
+    fn test_work_item_serialization() {
+        let data = vec![
+            VecWrapper(vec![Felt::from(1u64), Felt::from(2u64)]),
+            VecWrapper(vec![Felt::from(3u64), Felt::from(4u64)]),
+        ];
+
+        let work_item = HashingWorkItem { data, batch_idx: 0 };
+        let serialized = bincode::serialize(&work_item).unwrap();
+        let deserialized: HashingWorkItem = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(work_item.data, deserialized.data);
+    }
 }

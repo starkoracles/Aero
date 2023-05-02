@@ -3,30 +3,30 @@
 #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 use log::debug;
 use wasm_bindgen::prelude::*;
-use web_sys::{MessageEvent, Worker};
+use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, Worker, WorkerNavigator};
 
-use crate::utils::{HashingWorkItem, VecWrapper, WorkerJobPayload};
+use crate::utils::{to_uint8array, HashingWorkItem, VecWrapper};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WorkerPool {
     state: PoolState,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct PoolState {
     workers: Vec<Worker>,
 }
 
 impl WorkerPool {
-    fn get_concurrency() -> Result<usize, JsValue> {
-        let window = web_sys::window().ok_or(JsValue::from_str("cannot get window"))?;
-        let navigator = window.navigator();
-        let concurrency = navigator.hardware_concurrency() as usize;
-        Ok(concurrency)
+    fn get_hardware_concurrency() -> usize {
+        let global = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
+        let navigator: WorkerNavigator = global.navigator();
+        navigator.hardware_concurrency() as usize
     }
 
     pub fn new() -> Result<WorkerPool, JsValue> {
-        let concurrency = 10;
+        let concurrency = Self::get_hardware_concurrency();
+        debug!("creating worker pool with concurrency {}", concurrency);
         let mut pool = WorkerPool {
             state: PoolState {
                 workers: Vec::with_capacity(concurrency),
@@ -82,11 +82,11 @@ impl WorkerPool {
         debug!("running on worker idx: {}", worker_idx);
         let worker = self.worker(worker_idx)?;
 
-        let work_item = WorkerJobPayload::HashingWorkItem(HashingWorkItem {
+        let work_item = HashingWorkItem {
             data: elements_table,
             batch_idx,
-        });
-        let payload = work_item.to_uint8array();
+        };
+        let payload = to_uint8array(&work_item);
         worker.post_message(&payload)?;
         worker.set_onmessage(Some(get_on_msg_callback.as_ref().unchecked_ref()));
         get_on_msg_callback.forget();

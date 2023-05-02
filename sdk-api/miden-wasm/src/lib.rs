@@ -1,11 +1,11 @@
 #![feature(once_cell)]
 use futures::Future;
 use js_sys::Uint8Array;
-use log::{error, info};
+use log::debug;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::{cell::RefCell, rc::Rc};
-use utils::{set_once_logger, WorkerJobPayload};
+use utils::set_once_logger;
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, Worker};
 
@@ -19,7 +19,7 @@ pub mod pool;
 pub mod proving_worker;
 pub mod utils;
 use crate::convert::sdk::sdk;
-use crate::utils::{ProverOutput, ProvingWorkItem};
+use crate::utils::{from_uint8array, to_uint8array, ProverOutput, ProvingWorkItem};
 
 pub struct ResultFuture<T> {
     pub result: Rc<RefCell<Option<T>>>,
@@ -93,14 +93,14 @@ impl MidenProver {
         chunk_size: usize,
     ) -> Result<ProverOutput, JsValue> {
         self.set_onmessage_handler();
-        let work_item = WorkerJobPayload::ProvingWorkItem(ProvingWorkItem {
+        let work_item = ProvingWorkItem {
             program,
             program_inputs,
             proof_options,
             chunk_size,
             is_sequential: false,
-        });
-        let payload = work_item.to_uint8array();
+        };
+        let payload = to_uint8array(&work_item);
         self.prover_worker.post_message(&payload)?;
         ResultFuture {
             result: self.prover_output.clone(),
@@ -119,14 +119,14 @@ impl MidenProver {
         proof_options: Vec<u8>,
     ) -> Result<ProverOutput, JsValue> {
         self.set_onmessage_handler();
-        let work_item = WorkerJobPayload::ProvingWorkItem(ProvingWorkItem {
+        let work_item = ProvingWorkItem {
             program,
             program_inputs,
             proof_options,
             chunk_size: 1024,
             is_sequential: true,
-        });
-        let payload = work_item.to_uint8array();
+        };
+        let payload = to_uint8array(&work_item);
         self.prover_worker.post_message(&payload)?;
         ResultFuture {
             result: self.prover_output.clone(),
@@ -150,15 +150,10 @@ impl MidenProver {
     fn get_on_msg_callback(&self) -> Closure<dyn FnMut(MessageEvent)> {
         let prover_output = self.prover_output.clone();
         let callback = Closure::new(move |event: MessageEvent| {
-            info!("Main thread got message, event: {:?}", &event.data());
+            debug!("Main thread got prover output");
             let data: Uint8Array = Uint8Array::new(&event.data());
-            let payload = WorkerJobPayload::from_uint8array(data);
-            if let WorkerJobPayload::ProvingResult(output) = payload {
-                info!("Main thread got prover output");
-                prover_output.replace(Some(output));
-            } else {
-                error!("Main thread got other message");
-            }
+            let output: ProverOutput = from_uint8array(&data);
+            prover_output.replace(Some(output));
         });
 
         callback

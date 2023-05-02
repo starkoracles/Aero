@@ -29,21 +29,21 @@ module.exports = {
             },
             {
                 test: /src\/hashing_worker\.ts$/,
-                use: {
+                use: [{
                     loader: 'worker-loader',
                     options: {
                         filename: 'hashing_worker.js',
-                    },
-                },
+                    }
+                }, { loader: 'ts-loader', }],
             },
             {
                 test: /src\/proving_worker\.ts$/,
-                use: {
+                use: [{
                     loader: 'worker-loader',
                     options: {
                         filename: 'proving_worker.js',
-                    },
-                },
+                    }
+                }, { loader: 'ts-loader', }],
             },
         ]
     },

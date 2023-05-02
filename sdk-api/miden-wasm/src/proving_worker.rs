@@ -1,10 +1,13 @@
 use crate::convert::convert_proof::*;
 use crate::convert::sdk::sdk;
 use crate::pool::WorkerPool;
-use crate::utils::{set_once_logger, ProverOutput, ProvingWorkItem, VecWrapper, WorkerJobPayload};
+use crate::utils::{
+    from_uint8array, set_once_logger, to_uint8array, HashingResult, ProverOutput, ProvingWorkItem,
+    VecWrapper,
+};
 use futures::Future;
 use js_sys::Uint8Array;
-use log::{error, info};
+use log::{debug, info};
 use miden::{verify, ExecutionTrace, Program, ProgramInputs, ProofOptions};
 use miden_air::{Felt, FieldElement, ProcessorAir, PublicInputs, StarkField};
 use miden_core::ProgramOutputs;
@@ -93,6 +96,25 @@ impl MidenProverAsyncWorker {
         })
     }
 
+    #[wasm_bindgen]
+    pub fn reset(&mut self) -> Result<MidenProverAsyncWorker, JsValue> {
+        Ok(Self {
+            trace: None,
+            program: None,
+            program_inputs: None,
+            proof_options: None,
+            program_outputs: None,
+            channel: None,
+            trace_polys: None,
+            trace_lde: None,
+            worker_pool: self.worker_pool.clone(),
+            trace_row_hashes: Rc::new(RefCell::new(Vec::new())),
+            chunk_size: None,
+            prover: None,
+            air: None,
+        })
+    }
+
     async fn prove(&mut self, proving_work_item: ProvingWorkItem) -> Result<ProverOutput, JsValue> {
         console::time_with_label("preparing_inputs");
         let miden_program = sdk::MidenProgram::decode(&proving_work_item.program[..])
@@ -132,7 +154,7 @@ impl MidenProverAsyncWorker {
 
         let main_trace_tree: MerkleTree<Blake2s_256<Felt>> =
             MerkleTree::new(trace_row_hashes).expect("failed to construct trace Merkle tree");
-        info!("Merkle root: {:?}", main_trace_tree.root().into_js_value());
+        debug!("Merkle root: {:?}", main_trace_tree.root().into_js_value());
 
         let prover = ExecutionProver::new(
             self.proof_options.clone().unwrap(),
@@ -262,7 +284,7 @@ impl MidenProverAsyncWorker {
     async fn prove_trace_hashes(&mut self, chunk_size: usize) -> Result<(), JsValue> {
         let trace_lde = self.trace_lde.as_ref().unwrap();
 
-        info!("trace_lde: {:?}", trace_lde.num_rows());
+        debug!("trace_lde: {:?}", trace_lde.num_rows());
         self.trace_row_hashes = Rc::new(RefCell::new(vec![]));
         self.chunk_size = Some(chunk_size);
         // this is fine since trace length is a power of 2
@@ -373,62 +395,40 @@ impl MidenProverAsyncWorker {
     fn get_on_msg_callback(&self) -> Closure<dyn FnMut(MessageEvent)> {
         let trace_row_hashes = self.trace_row_hashes.clone();
         let callback = Closure::new(move |event: MessageEvent| {
-            info!("Proving get_on_msg_callback thread got message");
+            debug!("Proving get_on_msg_callback thread got message");
             let data: Uint8Array = Uint8Array::new(&event.data());
-            let payload: WorkerJobPayload = WorkerJobPayload::from_uint8array(data);
-            info!("Prover get_on_msg_callback received work item");
-            if let WorkerJobPayload::HashingResult(hashing_result) = payload {
-                let hashes = hashing_result
-                    .hashes
-                    .into_iter()
-                    .map(|d| ByteDigest::new(d))
-                    .collect();
-                trace_row_hashes
-                    .borrow_mut()
-                    .push((hashing_result.batch_idx, hashes));
-            } else {
-                error!("Wrong type of payload");
-            }
+            let hashing_result: HashingResult = from_uint8array(&data);
+            let hashes = hashing_result
+                .hashes
+                .into_iter()
+                .map(|d| ByteDigest::new(d))
+                .collect();
+            trace_row_hashes
+                .borrow_mut()
+                .push((hashing_result.batch_idx, hashes));
         });
 
         callback
     }
-
-    // fn process_hashing_result(&mut self, hashing_result: HashingResult) {
-    //     let hashes = hashing_result
-    //         .hashes
-    //         .into_iter()
-    //         .map(|d| ByteDigest::new(d))
-    //         .collect();
-    //     self.trace_row_hashes
-    //         .borrow_mut()
-    //         .push((hashing_result.batch_idx, hashes));
-    // }
 }
 
 #[wasm_bindgen]
 pub async fn proving_entry_point(
-    mut prover: MidenProverAsyncWorker,
+    prover: &mut MidenProverAsyncWorker,
     msg: MessageEvent,
 ) -> Result<(), JsValue> {
     set_once_logger();
-    info!("got proving workload");
+    debug!("got proving workload");
     let data: Uint8Array = Uint8Array::new(&msg.data());
-    let payload: WorkerJobPayload = WorkerJobPayload::from_uint8array(data);
-    info!("Proving proving_entry_point received message from worker");
-
-    if let WorkerJobPayload::ProvingWorkItem(proving_work_item) = payload {
-        let prover_output = if proving_work_item.is_sequential {
-            prover.prove_sequential(proving_work_item)?
-        } else {
-            prover.prove(proving_work_item).await?
-        };
-        let payload = WorkerJobPayload::ProvingResult(prover_output).to_uint8array();
-        let global_scope = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
-        global_scope.post_message(&payload)?;
-        info!("sent payload back to main thread");
+    let proving_work_item: ProvingWorkItem = from_uint8array(&data);
+    let prover_output = if proving_work_item.is_sequential {
+        prover.prove_sequential(proving_work_item)?
     } else {
-        return Err(JsValue::from_str("Wrong type of payload"));
-    }
+        prover.prove(proving_work_item).await?
+    };
+    let payload = to_uint8array(&prover_output);
+    let global_scope = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
+    global_scope.post_message(&payload)?;
+    debug!("sent payload back to main thread");
     Ok(())
 }
