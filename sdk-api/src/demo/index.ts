@@ -1,8 +1,9 @@
 import { prove, prove_sequential, uint8ArrayToU64LE } from "../sdk";
 import { MidenProgram, MidenProgramInputs } from "../proto-ts/miden_prover";
 import "../hashing_worker";
+import "../proving_worker";
 
-const FIB_NUM = 1000;
+const FIB_NUM = 10;
 
 async function onPageLoad() {
   document.querySelector("body").innerHTML = `<h1>Proving the ${FIB_NUM}th fib number!</h1><button id="run_proof">Run Proof</button><button id="run_proof_sequential">Run Proof sequential</button><h2 id="result"></h2>`;
@@ -20,6 +21,9 @@ async function onPageLoad() {
       await runProofSequential();
     });
   });
+  self.onmessage = event => {
+    console.log("Main thread received message", event);
+  }
 }
 
 async function runProof() {
@@ -93,7 +97,7 @@ async function runProofSequential() {
                     end`
       });
       let inputs = MidenProgramInputs.fromJSON({ stackInit: [FIB_NUM], adviceTape: [] });
-      const [, outputs,] = prove_sequential(program, inputs);
+      const [, outputs,] = await prove_sequential(program, inputs);
 
       let result = uint8ArrayToU64LE(outputs.stack[0].element);
 

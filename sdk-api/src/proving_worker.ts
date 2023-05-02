@@ -1,8 +1,8 @@
-import init from "miden-wasm";
-import { hashing_entry_point } from "miden-wasm";
+import init, { MidenProverAsyncWorker } from "miden-wasm";
+import { proving_entry_point } from "miden-wasm";
 
 self.onmessage = event => {
-    console.log("Worker received init:", event.data);
+    console.log("Proving worker received init:", event.data);
     let initialised = init().catch(err => {
         // Propagate to main `onerror`:
         setTimeout(() => {
@@ -11,10 +11,15 @@ self.onmessage = event => {
         // Rethrow to keep promise rejected and prevent execution of further commands:
         throw err;
     });
+    var prover = null;
+    let full_init = initialised.then(() => {
+        prover = new MidenProverAsyncWorker();
+    });
 
     self.onmessage = async event => {
         // This will queue further commands up until the module is fully initialised:
-        await initialised;
-        hashing_entry_point(event);
+        await full_init;
+        await proving_entry_point(prover, event);
+        postMessage("done");
     };
 };

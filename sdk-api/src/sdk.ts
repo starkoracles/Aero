@@ -1,4 +1,4 @@
-import init, { MidenProver, ProverOutput, start } from "miden-wasm";
+import init, { MidenProver, start } from "miden-wasm";
 import { MidenProgram, MidenProgramInputs } from "./proto-ts/miden_prover";
 import { StarkProof } from "./proto-ts/stark_proof";
 import { MidenProgramOutputs, MidenPublicInputs } from "./proto-ts/miden_vm";
@@ -33,7 +33,7 @@ export async function prove(program: MidenProgram, inputs: MidenProgramInputs, o
     return [proof, outputs, pub_inputs];
 }
 
-export function prove_sequential(program: MidenProgram, inputs: MidenProgramInputs, options: ProofOptions = ProofOptions.fromJSON({
+export async function prove_sequential(program: MidenProgram, inputs: MidenProgramInputs, options: ProofOptions = ProofOptions.fromJSON({
     numQueries: 27,
     blowupFactor: 8,
     grindingFactor: 16,
@@ -42,11 +42,11 @@ export function prove_sequential(program: MidenProgram, inputs: MidenProgramInpu
     friFoldingFactor: 8,
     friMaxRemainderSize: 256,
     primeField: PrimeField.GOLDILOCKS,
-})): [StarkProof, MidenProgramOutputs, MidenPublicInputs] {
+})): Promise<[StarkProof, MidenProgramOutputs, MidenPublicInputs]> {
     let program_bytes = MidenProgram.encode(program).finish();
     let input_bytes = MidenProgramInputs.encode(inputs).finish();
     let option_bytes = ProofOptions.encode(options).finish();
-    let proof_outputs = miden_prover.prove_sequential(program_bytes, input_bytes, option_bytes);
+    let proof_outputs = await miden_prover.prove_sequential(program_bytes, input_bytes, option_bytes);
 
     let proof = StarkProof.decode(proof_outputs.proof);
     let outputs = MidenProgramOutputs.decode(proof_outputs.program_outputs);

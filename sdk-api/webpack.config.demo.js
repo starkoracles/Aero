@@ -36,6 +36,15 @@ module.exports = {
                     },
                 },
             },
+            {
+                test: /src\/proving_worker\.ts$/,
+                use: {
+                    loader: 'worker-loader',
+                    options: {
+                        filename: 'proving_worker.js',
+                    },
+                },
+            },
         ]
     },
     plugins: [
