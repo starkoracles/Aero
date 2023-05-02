@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package sdk;
+
+import "common.proto";
+import "queries.proto";
+
+message FriProofLayer {
+    repeated FieldElement values = 1;
+    BatchMerkleProof proofs = 2;
+}
+
+message FriProof {
+    // TODO - convert to prover agnostic format, now it's miden specific
+    repeated FriProofLayer layers = 1;
+    repeated FieldElement remainder = 2;
+    uint32 num_partitions =  3; // stored as power of 2
+}

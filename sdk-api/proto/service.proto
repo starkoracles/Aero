@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package sdk;
+
+import "stark_proof.proto";
+import "miden_vm.proto";
+
+enum TargetChain {
+    STARKNET = 0;
+}
+
+enum SourceProofSystem {
+    MIDEN = 0;
+}
+
+message ProofSubmissionRequest {
+    StarkProof proof = 1;
+    MidenPublicInputs public_inputs = 2;
+    SourceProofSystem source_proof_system = 3;
+    TargetChain target_chain = 4;
+}
+
+message ProofSubmissionResponse {
+    string receipt = 1;
+}
+
+service ProofSubmissionService {
+    rpc SubmitProof(ProofSubmissionRequest) returns (ProofSubmissionResponse);
+}

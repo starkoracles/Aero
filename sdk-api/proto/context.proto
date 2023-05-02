@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package sdk;
+
+import "common.proto";
+
+enum HashFunction {
+    // we only support blake2s for now
+    BLAKE2S = 0;
+}
+
+enum FieldExtension {
+    // we do not support field extension yet
+    NONE = 0;
+    // QUADRATIC = 2;
+    // CUBIC = 3;
+}
+
+enum PrimeField {
+    // goldilocks field represented by 64 bit field elements
+    GOLDILOCKS = 0;
+}
+
+message ProofOptions {
+    uint32 num_queries = 1;
+    uint32 blowup_factor = 2;
+    uint32 grinding_factor = 3;
+    HashFunction hash_fn = 4;
+    FieldExtension field_extension = 5;
+    uint32 fri_folding_factor = 6;
+    uint32 fri_max_remainder_size = 7;
+    PrimeField prime_field = 8;
+}
+
+message TraceLayout {
+    uint64 main_segment_width = 1;
+    repeated uint64 aux_segment_widths = 2 [packed=true];
+    repeated uint64 aux_segment_rands = 3 [packed=true];
+    uint64 num_aux_segments = 4;
+}
+
+message Context {
+    TraceLayout trace_layout = 1;
+    uint64 trace_length = 2;
+    bytes trace_meta = 3;
+    FieldElement field_modulus = 4;
+    ProofOptions options = 5;
+}

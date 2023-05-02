@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package sdk;
+
+import "common.proto";
+
+message Commitments {
+    repeated Digest trace_roots = 1;
+    Digest constraint_root = 2;
+    repeated Digest fri_roots = 3;
+}

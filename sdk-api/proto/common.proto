@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package sdk;
+
+message FieldElement {
+    // element le bytes
+    bytes element = 2;
+}
+
+message Table {
+    uint32 n_rows = 1;
+    uint32 n_cols = 2;
+    // stored as a single dim vector each row at a time
+    repeated FieldElement elements = 3;
+}
+
+message Digest {
+    // digest bytes
+    bytes data = 2;
+}

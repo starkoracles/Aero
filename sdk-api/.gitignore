@@ -1,0 +1,4 @@
+node_modules/*
+dist/*
+src/proto-ts/*
+build/*

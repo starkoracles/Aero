@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package sdk;
+
+import "context.proto";
+import "commitments.proto";
+import "queries.proto";
+import "ood_frame.proto";
+import "fri_proof.proto";
+
+
+// A STARK proof for a computation.
+message StarkProof {
+    // Basic metadata about the execution of the computation described by this proof.
+    Context context = 1;
+    // Commitments made by the prover during the commit phase of the protocol.
+    Commitments commitments = 2;
+    // Decommitments of extended execution trace values (for all trace segments) at position
+    // queried by the verifier.
+    TraceQueries trace_queries = 3;
+    // Decommitments of constraint composition polynomial evaluations at positions queried by
+    // the verifier.
+    ConstraintQueries constraint_queries = 4;
+    // Trace and constraint polynomial evaluations at an out-of-domain point.
+    OodFrame ood_frame = 5;
+    // Low-degree proof for a DEEP composition polynomial.
+    FriProof fri_proof = 6;
+    // Proof-of-work nonce for query seed grinding.
+    uint64 pow_nonce = 7;
+}
