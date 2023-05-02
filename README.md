@@ -1,4 +1,7 @@
-# Miden verifier on Starknet
+# Aero
+A Blazingly fast toolkit for running proofs in the browser and verifying them on-chain.
+
+## Miden verifier on Starknet
 [MidenVM](https://github.com/0xPolygonMiden/miden-vm) is an MIT licensed StarkVM which can now be verified on Starknet.
 
 [![Twitter URL](https://img.shields.io/twitter/follow/stark_oracle?style=social)](https://twitter.com/stark_oracle)
