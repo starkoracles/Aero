@@ -5,7 +5,7 @@ use log::debug;
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, Worker};
 
-use crate::utils::{HashingWorkItem, IntoWorkerPayload, VecWrapper};
+use crate::utils::{HashingWorkItem, VecWrapper, WorkerJobPayload};
 
 #[derive(Debug)]
 pub struct WorkerPool {
@@ -82,11 +82,11 @@ impl WorkerPool {
         debug!("running on worker idx: {}", worker_idx);
         let worker = self.worker(worker_idx)?;
 
-        let work_item = HashingWorkItem {
+        let work_item = WorkerJobPayload::HashingWorkItem(HashingWorkItem {
             data: elements_table,
             batch_idx,
-        };
-        let payload = work_item.into_worker_payload();
+        });
+        let payload = work_item.to_uint8array();
         worker.post_message(&payload)?;
         worker.set_onmessage(Some(get_on_msg_callback.as_ref().unchecked_ref()));
         get_on_msg_callback.forget();

@@ -1,11 +1,11 @@
 #![feature(once_cell)]
 use futures::Future;
 use js_sys::Uint8Array;
-use log::info;
+use log::{error, info};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::{cell::RefCell, rc::Rc};
-use utils::{set_once_logger, WorkerJobPayload, WorkerJobType};
+use utils::{set_once_logger, WorkerJobPayload};
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, Worker};
 
@@ -19,7 +19,7 @@ pub mod pool;
 pub mod proving_worker;
 pub mod utils;
 use crate::convert::sdk::sdk;
-use crate::utils::{IntoWorkerPayload, ProverOutput, ProvingWorkItem, WorkerPayload};
+use crate::utils::{ProverOutput, ProvingWorkItem};
 
 pub struct ResultFuture<T> {
     pub result: Rc<RefCell<Option<T>>>,
@@ -93,14 +93,14 @@ impl MidenProver {
         chunk_size: usize,
     ) -> Result<ProverOutput, JsValue> {
         self.set_onmessage_handler();
-        let work_item = ProvingWorkItem {
+        let work_item = WorkerJobPayload::ProvingWorkItem(ProvingWorkItem {
             program,
             program_inputs,
             proof_options,
             chunk_size,
             is_sequential: false,
-        };
-        let payload = work_item.into_worker_payload();
+        });
+        let payload = work_item.to_uint8array();
         self.prover_worker.post_message(&payload)?;
         ResultFuture {
             result: self.prover_output.clone(),
@@ -119,14 +119,14 @@ impl MidenProver {
         proof_options: Vec<u8>,
     ) -> Result<ProverOutput, JsValue> {
         self.set_onmessage_handler();
-        let work_item = ProvingWorkItem {
+        let work_item = WorkerJobPayload::ProvingWorkItem(ProvingWorkItem {
             program,
             program_inputs,
             proof_options,
             chunk_size: 1024,
             is_sequential: true,
-        };
-        let payload = work_item.into_worker_payload();
+        });
+        let payload = work_item.to_uint8array();
         self.prover_worker.post_message(&payload)?;
         ResultFuture {
             result: self.prover_output.clone(),
@@ -139,8 +139,8 @@ impl MidenProver {
 
     fn set_onmessage_handler(&mut self) {
         let callback = self.get_on_msg_callback();
-        let window = web_sys::window().unwrap();
-        window.set_onmessage(Some(callback.as_ref().unchecked_ref()));
+        self.prover_worker
+            .set_onmessage(Some(callback.as_ref().unchecked_ref()));
 
         // Clean up closure to prevent memory leak
         callback.forget();
@@ -148,34 +148,16 @@ impl MidenProver {
 
     /// Message passing by the main thread
     fn get_on_msg_callback(&self) -> Closure<dyn FnMut(MessageEvent)> {
-        let prover_clone = self.prover_worker.clone();
         let prover_output = self.prover_output.clone();
         let callback = Closure::new(move |event: MessageEvent| {
-            info!("Main thread got message");
-            let data: Vec<u8> = Uint8Array::new(&event.data()).to_vec();
-            let work_item: WorkerPayload = bincode::deserialize(&data).unwrap();
-            info!("Main thread received work item: {:?}", work_item.job_type);
-            match work_item.job_type {
-                WorkerJobType::HashingWorkItem => {
-                    panic!("HashingWorkItem should not be sent to the main thread")
-                }
-                WorkerJobType::ProvingWorkItem => {
-                    panic!("ProvingWorkItem should not be sent to the main thread")
-                }
-                WorkerJobType::HashingResult => {
-                    // passing result to hashing result
-                    prover_clone.post_message(&event.data()).unwrap();
-                }
-                WorkerJobType::ProvingResult => {
-                    if let WorkerJobPayload::ProvingResult(proving_result) =
-                        bincode::deserialize(&work_item.payload).unwrap()
-                    {
-                        let mut prover_output = prover_output.borrow_mut();
-                        *prover_output = Some(proving_result);
-                    } else {
-                        panic!("Wrong type of payload");
-                    }
-                }
+            info!("Main thread got message, event: {:?}", &event.data());
+            let data: Uint8Array = Uint8Array::new(&event.data());
+            let payload = WorkerJobPayload::from_uint8array(data);
+            if let WorkerJobPayload::ProvingResult(output) = payload {
+                info!("Main thread got prover output");
+                prover_output.replace(Some(output));
+            } else {
+                error!("Main thread got other message");
             }
         });
 

@@ -1,13 +1,10 @@
 use crate::convert::convert_proof::*;
 use crate::convert::sdk::sdk;
 use crate::pool::WorkerPool;
-use crate::utils::{
-    set_once_logger, HashingResult, IntoWorkerPayload, ProverOutput, ProvingWorkItem, VecWrapper,
-    WorkerJobPayload, WorkerJobType, WorkerPayload,
-};
+use crate::utils::{set_once_logger, ProverOutput, ProvingWorkItem, VecWrapper, WorkerJobPayload};
 use futures::Future;
 use js_sys::Uint8Array;
-use log::info;
+use log::{error, info};
 use miden::{verify, ExecutionTrace, Program, ProgramInputs, ProofOptions};
 use miden_air::{Felt, FieldElement, ProcessorAir, PublicInputs, StarkField};
 use miden_core::ProgramOutputs;
@@ -377,54 +374,36 @@ impl MidenProverAsyncWorker {
         let trace_row_hashes = self.trace_row_hashes.clone();
         let callback = Closure::new(move |event: MessageEvent| {
             info!("Proving get_on_msg_callback thread got message");
-            let data: Vec<u8> = Uint8Array::new(&event.data()).to_vec();
-            let work_item: WorkerPayload = bincode::deserialize(&data).unwrap();
-            info!(
-                "Prover get_on_msg_callback received work item: {:?}",
-                work_item.job_type
-            );
-            match work_item.job_type {
-                WorkerJobType::HashingWorkItem => {
-                    panic!("HashingWorkItem should not be sent to the Prover get_on_msg_callback")
-                }
-                WorkerJobType::ProvingWorkItem => {
-                    panic!("ProvingWorkItem should not be sent to the Prover get_on_msg_callback")
-                }
-                WorkerJobType::HashingResult => {
-                    if let WorkerJobPayload::HashingResult(hashing_result) =
-                        bincode::deserialize(&work_item.payload).unwrap()
-                    {
-                        let hashes = hashing_result
-                            .hashes
-                            .into_iter()
-                            .map(|d| ByteDigest::new(d))
-                            .collect();
-                        trace_row_hashes
-                            .borrow_mut()
-                            .push((hashing_result.batch_idx, hashes));
-                    } else {
-                        panic!("Wrong type of payload");
-                    }
-                }
-                WorkerJobType::ProvingResult => {
-                    panic!("ProvingResult should not be sent to the Prover get_on_msg_callback");
-                }
+            let data: Uint8Array = Uint8Array::new(&event.data());
+            let payload: WorkerJobPayload = WorkerJobPayload::from_uint8array(data);
+            info!("Prover get_on_msg_callback received work item");
+            if let WorkerJobPayload::HashingResult(hashing_result) = payload {
+                let hashes = hashing_result
+                    .hashes
+                    .into_iter()
+                    .map(|d| ByteDigest::new(d))
+                    .collect();
+                trace_row_hashes
+                    .borrow_mut()
+                    .push((hashing_result.batch_idx, hashes));
+            } else {
+                error!("Wrong type of payload");
             }
         });
 
         callback
     }
 
-    fn process_hashing_result(&mut self, hashing_result: HashingResult) {
-        let hashes = hashing_result
-            .hashes
-            .into_iter()
-            .map(|d| ByteDigest::new(d))
-            .collect();
-        self.trace_row_hashes
-            .borrow_mut()
-            .push((hashing_result.batch_idx, hashes));
-    }
+    // fn process_hashing_result(&mut self, hashing_result: HashingResult) {
+    //     let hashes = hashing_result
+    //         .hashes
+    //         .into_iter()
+    //         .map(|d| ByteDigest::new(d))
+    //         .collect();
+    //     self.trace_row_hashes
+    //         .borrow_mut()
+    //         .push((hashing_result.batch_idx, hashes));
+    // }
 }
 
 #[wasm_bindgen]
@@ -434,49 +413,22 @@ pub async fn proving_entry_point(
 ) -> Result<(), JsValue> {
     set_once_logger();
     info!("got proving workload");
-    let data: Vec<u8> = Uint8Array::new(&msg.data()).to_vec();
-    let work_item: WorkerPayload = bincode::deserialize(&data)
-        .map_err(|err| format!("Could not deserialize work item: {:?}", err))?;
-    info!(
-        "Proving Worker received message from worker: {:?}",
-        work_item.job_type
-    );
+    let data: Uint8Array = Uint8Array::new(&msg.data());
+    let payload: WorkerJobPayload = WorkerJobPayload::from_uint8array(data);
+    info!("Proving proving_entry_point received message from worker");
 
-    match work_item.job_type {
-        WorkerJobType::HashingWorkItem => {
-            return Err(JsValue::from_str("Got hashing work item in proving worker"));
-        }
-        WorkerJobType::ProvingWorkItem => {
-            if let WorkerJobPayload::ProvingWorkItem(proving_work_item) =
-                bincode::deserialize(&work_item.payload)
-                    .map_err(|err| format!("Could not deserialize proving work item: {:?}", err))?
-            {
-                let prover_output = if proving_work_item.is_sequential {
-                    prover.prove_sequential(proving_work_item)?
-                } else {
-                    prover.prove(proving_work_item).await?
-                };
-                let payload = prover_output.into_worker_payload();
-                let global_scope = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
-                global_scope.post_message(&payload)?;
-                info!("sent payload back to main thread");
-            } else {
-                return Err(JsValue::from_str("something went wrong"));
-            }
-        }
-        WorkerJobType::HashingResult => {
-            if let WorkerJobPayload::HashingResult(hashing_result) =
-                bincode::deserialize(&work_item.payload)
-                    .map_err(|err| format!("Could not deserialize hashing result: {:?}", err))?
-            {
-                prover.process_hashing_result(hashing_result);
-            } else {
-                return Err(JsValue::from_str("something went wrong"));
-            }
-        }
-        WorkerJobType::ProvingResult => {
-            return Err(JsValue::from_str("Got proving result in proving worker"));
-        }
+    if let WorkerJobPayload::ProvingWorkItem(proving_work_item) = payload {
+        let prover_output = if proving_work_item.is_sequential {
+            prover.prove_sequential(proving_work_item)?
+        } else {
+            prover.prove(proving_work_item).await?
+        };
+        let payload = WorkerJobPayload::ProvingResult(prover_output).to_uint8array();
+        let global_scope = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
+        global_scope.post_message(&payload)?;
+        info!("sent payload back to main thread");
+    } else {
+        return Err(JsValue::from_str("Wrong type of payload"));
     }
     Ok(())
 }

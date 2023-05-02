@@ -21,9 +21,6 @@ async function onPageLoad() {
       await runProofSequential();
     });
   });
-  self.onmessage = event => {
-    console.log("Main thread received message", event);
-  }
 }
 
 async function runProof() {

@@ -1,4 +1,4 @@
-use crate::utils::{set_once_logger, HashingResult, HashingWorkItem, IntoWorkerPayload};
+use crate::utils::{set_once_logger, HashingResult, HashingWorkItem, WorkerJobPayload};
 use js_sys::Uint8Array;
 use log::{debug, info};
 use wasm_bindgen::prelude::*;
@@ -14,24 +14,27 @@ pub fn blake2_hash_elements(work_item: &HashingWorkItem) -> Result<Uint8Array, J
     }
     debug!("done processing hashes for batch {}", work_item.batch_idx);
 
-    let response = HashingResult {
+    let response = WorkerJobPayload::HashingResult(HashingResult {
         batch_idx: work_item.batch_idx,
         hashes,
-    };
-    Ok(response.into_worker_payload())
+    });
+    Ok(response.to_uint8array())
 }
 
 #[wasm_bindgen]
 pub fn hashing_entry_point(msg: MessageEvent) -> Result<(), JsValue> {
     set_once_logger();
-    let data: Uint8Array = Uint8Array::new(&msg.data());
-    let work_item: HashingWorkItem = HashingWorkItem::from_worker_payload(data);
-    info!(
-        "Hashing worker received work item: {:?}",
-        work_item.batch_idx
-    );
-    let response = blake2_hash_elements(&work_item)?;
-    let global_scope = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
-    global_scope.post_message(&response)?;
-    Ok(())
+    let payload: WorkerJobPayload = WorkerJobPayload::from_uint8array(Uint8Array::new(&msg.data()));
+    if let WorkerJobPayload::HashingWorkItem(work_item) = payload {
+        info!(
+            "Hashing worker received work item: {:?}",
+            work_item.batch_idx
+        );
+        let response = blake2_hash_elements(&work_item)?;
+        let global_scope = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
+        global_scope.post_message(&response)?;
+        Ok(())
+    } else {
+        Err(JsValue::from_str("Hashing worker received invalid payload"))
+    }
 }

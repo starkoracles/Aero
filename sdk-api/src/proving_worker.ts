@@ -20,6 +20,5 @@ self.onmessage = event => {
         // This will queue further commands up until the module is fully initialised:
         await full_init;
         await proving_entry_point(prover, event);
-        postMessage("done");
     };
 };
