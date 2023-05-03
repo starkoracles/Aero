@@ -1,5 +1,5 @@
 {
-  "name": "proof-submit-sdk",
+  "name": "aero-sdk",
   "version": "1.0.0",
   "description": "Allow users to run proofs in the browser and submit on-chain",
   "main": "index.js",
