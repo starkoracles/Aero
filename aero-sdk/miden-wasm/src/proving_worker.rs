@@ -154,7 +154,7 @@ impl MidenProverAsyncWorker {
 
         let main_trace_tree: MerkleTree<Blake2s_256<Felt>> =
             MerkleTree::new(trace_row_hashes).expect("failed to construct trace Merkle tree");
-        debug!("Merkle root: {:?}", main_trace_tree.root().into_js_value());
+        debug!("Merkle root: {:x}", main_trace_tree.root());
 
         let prover = ExecutionProver::new(
             self.proof_options.clone().unwrap(),
