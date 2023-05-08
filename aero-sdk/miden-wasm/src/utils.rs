@@ -331,7 +331,21 @@ pub struct ConstraintComputeWorkItem {
         deserialize_with = "deserialize_trace_lde"
     )]
     pub trace_lde: TraceLde<Felt>,
+    pub computation_fragment: ComputationFragment,
 }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct ComputationFragment {
+    fragment_offset: usize,
+    fragment_rows: usize,
+    total_rows: usize,
+    fragment_columns: usize,
+    #[cfg(debug_assertions)]
+    tm_columns: usize,
+    #[cfg(debug_assertions)]
+    ta_columns: usize,
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProvingWorkItem {
     pub program: Vec<u8>,
@@ -503,6 +517,17 @@ mod work_item_test {
             vec![Felt::from(5u64), Felt::from(6u64)],
         ]));
 
+        let computation_fragment = ComputationFragment {
+            fragment_offset: 0,
+            fragment_rows: 8,
+            fragment_columns: 2,
+            total_rows: 16,
+            #[cfg(debug_assertions)]
+            tm_columns: 2,
+            #[cfg(debug_assertions)]
+            ta_columns: 3,
+        };
+
         let public_inputs = PublicInputs::new(program.hash(), stack_inputs, program_outputs);
         let work_item = ConstraintComputeWorkItem {
             trace_info,
@@ -511,6 +536,7 @@ mod work_item_test {
             aux_rand_elements,
             constraint_coeffs,
             trace_lde,
+            computation_fragment,
         };
         println!("{}", serde_json::to_string(&work_item).unwrap());
         let serialized = bincode::serialize(&work_item).unwrap();
@@ -585,6 +611,12 @@ mod work_item_test {
             deserialized_aux_trace.push(aux_segment_rows);
         }
         assert_eq!(work_item_aux_trace, deserialized_aux_trace);
+
+        // computation fragment
+        assert_eq!(
+            work_item.computation_fragment,
+            deserialized.computation_fragment
+        );
     }
 
     /// Generates a program to compute the `n`-th term of Fibonacci sequence
