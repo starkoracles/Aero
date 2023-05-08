@@ -5,7 +5,7 @@ use miden_air::{Felt, PublicInputs, StarkField};
 use serde::{ser::SerializeSeq, Deserializer, Serializer};
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
-use winter_air::{ProofOptions, TraceInfo, TraceLayout};
+use winter_air::{AuxTraceRandElements, ProofOptions, TraceInfo, TraceLayout};
 use winter_utils::{Deserializable, Serializable, SliceReader};
 
 fn serialize_trace_info<S: Serializer>(
@@ -114,6 +114,49 @@ winter_serde!(
     ProofOptions
 );
 
+fn serialize_aux_rand_elements<S: Serializer>(
+    input: &AuxTraceRandElements<Felt>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let flattened = input
+        .0
+        .iter()
+        .map(|v| VecWrapper(v.clone()))
+        .collect::<Vec<_>>();
+    let mut s = serializer.serialize_seq(Some(flattened.len()))?;
+    for e in flattened {
+        s.serialize_element(&e)?;
+    }
+    s.end()
+}
+
+fn deserialize_aux_rand_elements<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<AuxTraceRandElements<Felt>, D::Error> {
+    struct AuxRandElementsVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for AuxRandElementsVisitor {
+        type Value = AuxTraceRandElements<Felt>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a AuxTraceRandElements<Felt>")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let mut vec = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+            while let Some(e) = seq.next_element::<VecWrapper>()? {
+                vec.push(e.0);
+            }
+            Ok(AuxTraceRandElements(vec))
+        }
+    }
+
+    deserializer.deserialize_seq(AuxRandElementsVisitor)
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ConstraintComputeWorkItem {
     #[serde(
@@ -131,6 +174,11 @@ pub struct ConstraintComputeWorkItem {
         deserialize_with = "deserialize_proof_options"
     )]
     pub proof_options: ProofOptions,
+    #[serde(
+        serialize_with = "serialize_aux_rand_elements",
+        deserialize_with = "deserialize_aux_rand_elements"
+    )]
+    pub aux_rand_elements: AuxTraceRandElements<Felt>,
 }
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProvingWorkItem {
@@ -261,12 +309,18 @@ mod work_item_test {
             16,
             128,
         );
+        let aux_rand_elements = AuxTraceRandElements(vec![
+            vec![Felt::from(1u64)],
+            vec![Felt::from(2u64), Felt::from(3u64)],
+            vec![Felt::from(4u64), Felt::from(5u64), Felt::from(6u64)],
+        ]);
 
         let public_inputs = PublicInputs::new(program.hash(), stack_inputs, program_outputs);
         let work_item = ConstraintComputeWorkItem {
             trace_info,
             public_inputs,
             proof_options,
+            aux_rand_elements,
         };
         println!("{}", serde_json::to_string(&work_item).unwrap());
         let serialized = bincode::serialize(&work_item).unwrap();
@@ -287,6 +341,10 @@ mod work_item_test {
             deserialized.public_inputs.outputs.stack
         );
         assert_eq!(work_item.proof_options, deserialized.proof_options);
+        assert_eq!(
+            work_item.aux_rand_elements.0,
+            deserialized.aux_rand_elements.0
+        );
     }
 
     /// Generates a program to compute the `n`-th term of Fibonacci sequence
