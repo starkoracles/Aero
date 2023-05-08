@@ -3,7 +3,6 @@ use crate::convert::sdk::sdk;
 use crate::pool::WorkerPool;
 use crate::utils::{
     from_uint8array, set_once_logger, to_uint8array, HashingResult, ProverOutput, ProvingWorkItem,
-    VecWrapper,
 };
 use futures::Future;
 use js_sys::Uint8Array;
@@ -294,9 +293,10 @@ impl MidenProverAsyncWorker {
         for i in 0..num_of_batches {
             let mut batch = vec![];
             for _ in 0..chunk_size {
-                let mut row = VecWrapper(vec![Felt::ZERO; trace_lde.num_cols()]);
-                trace_lde.read_row_into(dispatched_idx, &mut row.0);
-                batch.push(row);
+                let mut row = vec![Felt::ZERO; trace_lde.num_cols()];
+                trace_lde.read_row_into(dispatched_idx, &mut row);
+                let converted = row.iter().map(|f| f.into()).collect();
+                batch.push(converted);
                 dispatched_idx += 1;
             }
             self.worker_pool.run(i, batch, self.get_on_msg_callback())?;

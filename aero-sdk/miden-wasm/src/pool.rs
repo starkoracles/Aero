@@ -5,7 +5,7 @@ use log::debug;
 use wasm_bindgen::prelude::*;
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, Worker, WorkerNavigator};
 
-use crate::utils::{to_uint8array, HashingWorkItem, VecWrapper};
+use crate::utils::{to_uint8array, FeltWrapper, HashingWorkItem};
 
 #[derive(Debug, Clone)]
 pub struct WorkerPool {
@@ -70,7 +70,7 @@ impl WorkerPool {
     fn execute(
         &self,
         batch_idx: usize,
-        elements_table: Vec<VecWrapper>,
+        elements_table: Vec<Vec<FeltWrapper>>,
         get_on_msg_callback: Closure<dyn FnMut(MessageEvent)>,
     ) -> Result<(), JsValue> {
         debug!(
@@ -98,7 +98,7 @@ impl WorkerPool {
     pub fn run(
         &self,
         batch_idx: usize,
-        elements_table: Vec<VecWrapper>,
+        elements_table: Vec<Vec<FeltWrapper>>,
         get_on_msg_callback: Closure<dyn FnMut(MessageEvent)>,
     ) -> Result<(), JsValue> {
         self.execute(batch_idx, elements_table, get_on_msg_callback)?;

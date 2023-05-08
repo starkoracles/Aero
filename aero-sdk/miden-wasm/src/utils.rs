@@ -5,7 +5,9 @@ use miden_air::{Felt, PublicInputs, StarkField};
 use serde::{ser::SerializeSeq, Deserializer, Serializer};
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
-use winter_air::{AuxTraceRandElements, ProofOptions, TraceInfo, TraceLayout};
+use winter_air::{
+    AuxTraceRandElements, ConstraintCompositionCoefficients, ProofOptions, TraceInfo, TraceLayout,
+};
 use winter_utils::{Deserializable, Serializable, SliceReader};
 
 fn serialize_trace_info<S: Serializer>(
@@ -118,10 +120,10 @@ fn serialize_aux_rand_elements<S: Serializer>(
     input: &AuxTraceRandElements<Felt>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    let flattened = input
+    let flattened: Vec<Vec<FeltWrapper>> = input
         .0
         .iter()
-        .map(|v| VecWrapper(v.clone()))
+        .map(|v| v.iter().map(|e| e.into()).collect::<Vec<_>>())
         .collect::<Vec<_>>();
     let mut s = serializer.serialize_seq(Some(flattened.len()))?;
     for e in flattened {
@@ -147,8 +149,12 @@ fn deserialize_aux_rand_elements<'de, D: Deserializer<'de>>(
             A: serde::de::SeqAccess<'de>,
         {
             let mut vec = Vec::with_capacity(seq.size_hint().unwrap_or(0));
-            while let Some(e) = seq.next_element::<VecWrapper>()? {
-                vec.push(e.0);
+            while let Some(v) = seq.next_element::<Vec<FeltWrapper>>()? {
+                vec.push(
+                    v.iter()
+                        .map(|wrapper| wrapper.clone().into())
+                        .collect::<Vec<_>>(),
+                );
             }
             Ok(AuxTraceRandElements(vec))
         }
@@ -156,6 +162,22 @@ fn deserialize_aux_rand_elements<'de, D: Deserializer<'de>>(
 
     deserializer.deserialize_seq(AuxRandElementsVisitor)
 }
+
+// fn serialize_constraint_coeffs<S: Serializer>(
+//     input: &ConstraintCompositionCoefficients<Felt>,
+//     serializer: S,
+// ) -> Result<S::Ok, S::Error> {
+//     let transition = input
+//         .transition
+//         .iter()
+//         .map(|v| VecWrapper(v.clone()))
+//         .collect::<Vec<_>>();
+//     let mut s = serializer.serialize_seq(Some(transition.len()))?;
+//     for e in flattened {
+//         s.serialize_element(&e)?;
+//     }
+//     s.end()
+// }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ConstraintComputeWorkItem {
@@ -191,51 +213,54 @@ pub struct ProvingWorkItem {
 
 #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HashingWorkItem {
-    pub data: Vec<VecWrapper>,
+    pub data: Vec<Vec<FeltWrapper>>,
     pub batch_idx: usize,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct VecWrapper(pub Vec<Felt>);
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct FeltWrapper(pub Felt);
 
-impl serde::Serialize for VecWrapper {
+impl serde::Serialize for FeltWrapper {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
-        self.0
-            .iter()
-            .map(|e| e.as_int())
-            .for_each(|e| seq.serialize_element(&e).unwrap());
-        seq.end()
+        serializer.serialize_u64(self.0.as_int())
     }
 }
 
-impl<'de> serde::Deserialize<'de> for VecWrapper {
+impl<'de> serde::Deserialize<'de> for FeltWrapper {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        struct VecWrapperVisitor;
+        struct FeltWrapperVisitor;
 
-        impl<'de> serde::de::Visitor<'de> for VecWrapperVisitor {
-            type Value = VecWrapper;
+        impl<'de> serde::de::Visitor<'de> for FeltWrapperVisitor {
+            type Value = FeltWrapper;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a vector of bytes")
+                formatter.write_str("a u64")
             }
 
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
             where
-                A: serde::de::SeqAccess<'de>,
+                E: serde::de::Error,
             {
-                let mut vec = Vec::with_capacity(seq.size_hint().unwrap_or(0));
-                while let Some(e) = seq.next_element::<u64>()? {
-                    vec.push(Felt::new(e));
-                }
-                Ok(VecWrapper(vec))
+                Ok(FeltWrapper(Felt::new(value)))
             }
         }
 
-        deserializer.deserialize_seq(VecWrapperVisitor)
+        deserializer.deserialize_u64(FeltWrapperVisitor)
+    }
+}
+
+impl From<&Felt> for FeltWrapper {
+    fn from(f: &Felt) -> Self {
+        Self(f.clone())
+    }
+}
+
+impl Into<Felt> for FeltWrapper {
+    fn into(self) -> Felt {
+        self.0
     }
 }
 
@@ -284,11 +309,19 @@ mod work_item_test {
     #[test]
     fn test_work_item_serialization() {
         let data = vec![
-            VecWrapper(vec![Felt::from(1u64), Felt::from(2u64)]),
-            VecWrapper(vec![Felt::from(3u64), Felt::from(4u64)]),
+            vec![Felt::from(1u64), Felt::from(2u64)],
+            vec![Felt::from(3u64), Felt::from(4u64)],
         ];
 
-        let work_item = HashingWorkItem { data, batch_idx: 0 };
+        let converted = data
+            .iter()
+            .map(|v| v.iter().map(|e| e.into()).collect())
+            .collect();
+
+        let work_item = HashingWorkItem {
+            data: converted,
+            batch_idx: 0,
+        };
         let serialized = bincode::serialize(&work_item).unwrap();
         let deserialized: HashingWorkItem = bincode::deserialize(&serialized).unwrap();
         assert_eq!(work_item.data, deserialized.data);
