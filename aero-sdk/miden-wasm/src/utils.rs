@@ -8,6 +8,7 @@ use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 use winter_air::{
     AuxTraceRandElements, ConstraintCompositionCoefficients, ProofOptions, TraceInfo, TraceLayout,
 };
+use winter_prover::{Matrix, TraceLde};
 use winter_utils::{Deserializable, Serializable, SliceReader};
 
 fn serialize_trace_info<S: Serializer>(
@@ -163,21 +164,140 @@ fn deserialize_aux_rand_elements<'de, D: Deserializer<'de>>(
     deserializer.deserialize_seq(AuxRandElementsVisitor)
 }
 
-// fn serialize_constraint_coeffs<S: Serializer>(
-//     input: &ConstraintCompositionCoefficients<Felt>,
-//     serializer: S,
-// ) -> Result<S::Ok, S::Error> {
-//     let transition = input
-//         .transition
-//         .iter()
-//         .map(|v| VecWrapper(v.clone()))
-//         .collect::<Vec<_>>();
-//     let mut s = serializer.serialize_seq(Some(transition.len()))?;
-//     for e in flattened {
-//         s.serialize_element(&e)?;
-//     }
-//     s.end()
-// }
+fn serialize_constraint_coeffs<S: Serializer>(
+    input: &ConstraintCompositionCoefficients<Felt>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let mut s: <S as Serializer>::SerializeSeq = serializer.serialize_seq(Some(2))?;
+    let converted_transition: Vec<(FeltWrapper, FeltWrapper)> = input
+        .transition
+        .iter()
+        .map(|(v0, v1)| (v0.into(), v1.into()))
+        .collect::<Vec<_>>();
+    let converted_boundary: Vec<(FeltWrapper, FeltWrapper)> = input
+        .boundary
+        .iter()
+        .map(|(v0, v1)| (v0.into(), v1.into()))
+        .collect::<Vec<_>>();
+    s.serialize_element(&converted_transition)?;
+    s.serialize_element(&converted_boundary)?;
+    s.end()
+}
+
+fn deserialize_constraint_coeffs<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<ConstraintCompositionCoefficients<Felt>, D::Error> {
+    struct ConstraintCoeffsVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for ConstraintCoeffsVisitor {
+        type Value = ConstraintCompositionCoefficients<Felt>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a ConstraintCompositionCoefficients<Felt>")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let transition = seq
+                .next_element::<Vec<(FeltWrapper, FeltWrapper)>>()?
+                .ok_or_else(|| {
+                    serde::de::Error::custom("expected transition to deser to Vec<(Felt, Felt)>")
+                })?
+                .iter()
+                .map(|(v0, v1)| (v0.clone().into(), v1.clone().into()))
+                .collect::<Vec<_>>();
+            let boundary = seq
+                .next_element::<Vec<(FeltWrapper, FeltWrapper)>>()?
+                .ok_or_else(|| {
+                    serde::de::Error::custom("expected boundary to deser to Vec<(Felt, Felt)>")
+                })?
+                .iter()
+                .map(|(v0, v1)| (v0.clone().into(), v1.clone().into()))
+                .collect::<Vec<_>>();
+            Ok(ConstraintCompositionCoefficients {
+                transition,
+                boundary,
+            })
+        }
+    }
+
+    deserializer.deserialize_seq(ConstraintCoeffsVisitor)
+}
+
+fn serialize_trace_lde<S: Serializer>(
+    input: &TraceLde<Felt>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let mut s: <S as Serializer>::SerializeSeq = serializer.serialize_seq(Some(3))?;
+    let mut converted_main: Vec<Vec<FeltWrapper>> = vec![];
+    for col in input.main_segment_lde.columns() {
+        converted_main.push(col.iter().map(|e| e.into()).collect::<Vec<_>>());
+    }
+    let mut converted_aux: Vec<Vec<Vec<FeltWrapper>>> = vec![];
+    for aux in input.aux_segment_ldes.iter() {
+        let mut converted_aux_segment: Vec<Vec<FeltWrapper>> = vec![];
+        for col in aux.columns() {
+            converted_aux_segment.push(col.iter().map(|e| e.into()).collect::<Vec<_>>());
+        }
+        converted_aux.push(converted_aux_segment);
+    }
+    s.serialize_element(&converted_main)?;
+    s.serialize_element(&converted_aux)?;
+    s.serialize_element(&input.blowup)?;
+    s.end()
+}
+
+fn deserialize_trace_lde<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<TraceLde<Felt>, D::Error> {
+    struct TraceLdeVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for TraceLdeVisitor {
+        type Value = TraceLde<Felt>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a TraceLde<Felt>")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let main_columns = seq
+                .next_element::<Vec<Vec<FeltWrapper>>>()?
+                .ok_or_else(|| {
+                    serde::de::Error::custom("expected main to deser to Vec<Vec<Felt>>")
+                })?
+                .iter()
+                .map(|col| col.iter().map(|e| e.clone().into()).collect::<Vec<_>>())
+                .collect::<Vec<_>>();
+            let aux_segments = seq
+                .next_element::<Vec<Vec<Vec<FeltWrapper>>>>()?
+                .ok_or_else(|| serde::de::Error::custom("expected aux to deser to Vec<Vec<Felt>>"))?
+                .iter()
+                .map(|aux_segment| {
+                    aux_segment
+                        .iter()
+                        .map(|col| col.iter().map(|e| e.clone().into()).collect::<Vec<_>>())
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            let blowup = seq
+                .next_element::<usize>()?
+                .ok_or_else(|| serde::de::Error::custom("expected blowup to deser"))?;
+            let mut trace_lde = TraceLde::new(Matrix::new(main_columns), blowup);
+            for aux_segment in aux_segments {
+                trace_lde.add_aux_segment(Matrix::new(aux_segment));
+            }
+
+            Ok(trace_lde)
+        }
+    }
+
+    deserializer.deserialize_seq(TraceLdeVisitor)
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ConstraintComputeWorkItem {
@@ -201,6 +321,16 @@ pub struct ConstraintComputeWorkItem {
         deserialize_with = "deserialize_aux_rand_elements"
     )]
     pub aux_rand_elements: AuxTraceRandElements<Felt>,
+    #[serde(
+        serialize_with = "serialize_constraint_coeffs",
+        deserialize_with = "deserialize_constraint_coeffs"
+    )]
+    pub constraint_coeffs: ConstraintCompositionCoefficients<Felt>,
+    #[serde(
+        serialize_with = "serialize_trace_lde",
+        deserialize_with = "deserialize_trace_lde"
+    )]
+    pub trace_lde: TraceLde<Felt>,
 }
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProvingWorkItem {
@@ -348,12 +478,39 @@ mod work_item_test {
             vec![Felt::from(4u64), Felt::from(5u64), Felt::from(6u64)],
         ]);
 
+        let constraint_coeffs = ConstraintCompositionCoefficients {
+            transition: vec![
+                (Felt::from(1u64), Felt::from(2u64)),
+                (Felt::from(3u64), Felt::from(4u64)),
+            ],
+            boundary: vec![
+                (Felt::from(5u64), Felt::from(6u64)),
+                (Felt::from(7u64), Felt::from(8u64)),
+                (Felt::from(7u64), Felt::from(8u64)),
+            ],
+        };
+
+        let mut trace_lde = TraceLde::new(
+            Matrix::new(vec![
+                vec![Felt::from(1u64), Felt::from(2u64)],
+                vec![Felt::from(2u64), Felt::from(11u64)],
+            ]),
+            8,
+        );
+        trace_lde.add_aux_segment(Matrix::new(vec![
+            vec![Felt::from(2u64), Felt::from(3u64)],
+            vec![Felt::from(4u64), Felt::from(5u64)],
+            vec![Felt::from(5u64), Felt::from(6u64)],
+        ]));
+
         let public_inputs = PublicInputs::new(program.hash(), stack_inputs, program_outputs);
         let work_item = ConstraintComputeWorkItem {
             trace_info,
             public_inputs,
             proof_options,
             aux_rand_elements,
+            constraint_coeffs,
+            trace_lde,
         };
         println!("{}", serde_json::to_string(&work_item).unwrap());
         let serialized = bincode::serialize(&work_item).unwrap();
@@ -378,6 +535,56 @@ mod work_item_test {
             work_item.aux_rand_elements.0,
             deserialized.aux_rand_elements.0
         );
+        assert_eq!(
+            work_item.constraint_coeffs.transition,
+            deserialized.constraint_coeffs.transition
+        );
+        assert_eq!(
+            work_item.constraint_coeffs.boundary,
+            deserialized.constraint_coeffs.boundary
+        );
+
+        // trace lde
+        let mut work_item_main_trace = vec![];
+        for i in 0..work_item.trace_lde.main_segment_lde.num_rows() {
+            let mut r = vec![];
+            work_item
+                .trace_lde
+                .main_segment_lde
+                .read_row_into(i, &mut r);
+            work_item_main_trace.push(r);
+        }
+        let mut deserialized_main_trace = vec![];
+        for i in 0..deserialized.trace_lde.main_segment_lde.num_rows() {
+            let mut r = vec![];
+            deserialized
+                .trace_lde
+                .main_segment_lde
+                .read_row_into(i, &mut r);
+            deserialized_main_trace.push(r);
+        }
+        assert_eq!(work_item_main_trace, deserialized_main_trace);
+        let mut work_item_aux_trace = vec![];
+        for aux_segment in work_item.trace_lde.aux_segment_ldes.iter() {
+            let mut aux_segment_rows = vec![];
+            for i in 0..aux_segment.num_rows() {
+                let mut r = vec![];
+                aux_segment.read_row_into(i, &mut r);
+                aux_segment_rows.push(r);
+            }
+            work_item_aux_trace.push(aux_segment_rows);
+        }
+        let mut deserialized_aux_trace = vec![];
+        for aux_segment in deserialized.trace_lde.aux_segment_ldes.iter() {
+            let mut aux_segment_rows = vec![];
+            for i in 0..aux_segment.num_rows() {
+                let mut r = vec![];
+                aux_segment.read_row_into(i, &mut r);
+                aux_segment_rows.push(r);
+            }
+            deserialized_aux_trace.push(aux_segment_rows);
+        }
+        assert_eq!(work_item_aux_trace, deserialized_aux_trace);
     }
 
     /// Generates a program to compute the `n`-th term of Fibonacci sequence
