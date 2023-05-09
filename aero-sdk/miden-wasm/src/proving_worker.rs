@@ -21,8 +21,8 @@ use std::{
 use wasm_bindgen::prelude::*;
 use web_sys::{console, DedicatedWorkerGlobalScope, MessageEvent};
 use winter_air::Air;
-use winter_crypto::{hashers::Blake2s_256, ByteDigest, Digest, MerkleTree};
-use winter_prover::{Matrix, Prover, ProverChannel, Serializable, StarkDomain, Trace};
+use winter_crypto::{hashers::Blake2s_256, ByteDigest, MerkleTree};
+use winter_prover::{Matrix, Prover, ProverChannel, Serializable, StarkDomain, StarkProof, Trace};
 
 pub struct ResolvableFuture<T> {
     pub result: Rc<RefCell<Vec<T>>>,
@@ -161,17 +161,7 @@ impl MidenProverAsyncWorker {
             self.program_outputs.clone().unwrap(),
         );
         console::time_with_label("prove_final_stage");
-        let channel_unpacked = self.channel.take().unwrap();
-        let proof = prover
-            .prove_after_build_trace_commitment(
-                self.air.clone().unwrap(),
-                channel_unpacked,
-                main_trace_tree,
-                self.trace_lde.take().unwrap(),
-                self.trace_polys.take().unwrap(),
-                self.trace.take().unwrap(),
-            )
-            .map_err(|err| format!("Cannot run prove_after_build_trace_commitment: {:?}", err))?;
+        let proof = self.prove_epilogue(&prover, main_trace_tree)?;
         console::time_end_with_label("prove_final_stage");
 
         let pub_inputs = PublicInputs::new(
@@ -310,6 +300,48 @@ impl MidenProverAsyncWorker {
         fut.await;
 
         Ok(())
+    }
+
+    fn prove_epilogue(
+        &mut self,
+        prover: &ExecutionProver,
+        main_trace_tree: MerkleTree<Blake2s_256<Felt>>,
+    ) -> Result<StarkProof, JsValue> {
+        let mut channel = self.channel.take().unwrap();
+        let air = self.air.as_ref().unwrap();
+        let domain = StarkDomain::new(air);
+        let main_trace_lde = self.trace_lde.take().unwrap();
+        let main_trace_polys = self.trace_polys.take().unwrap();
+        let mut trace = self.trace.take().unwrap();
+        let (trace_polys, trace_commitment, aux_trace_rand_elements) = prover
+            .commit_to_trace_and_validate(
+                &air,
+                &mut channel,
+                main_trace_tree,
+                main_trace_lde,
+                main_trace_polys,
+                &mut trace,
+            )
+            .map_err(|err| format!("Cannot run commit_to_trace_and_validate: {:?}", err))?;
+
+        let constraint_evaluations = prover
+            .evaluate_constraints(
+                &air,
+                &domain,
+                &mut channel,
+                trace_commitment.trace_table(),
+                aux_trace_rand_elements,
+            )
+            .map_err(|err| format!("Cannot run evaluate_constraints: {:?}", err))?;
+        Ok(prover
+            .prove_after_constraint_eval(
+                &air,
+                channel,
+                constraint_evaluations,
+                trace_polys,
+                trace_commitment,
+            )
+            .map_err(|err| format!("Cannot run prove_after_build_trace_commitment: {:?}", err))?)
     }
 
     fn prove_sequential(
