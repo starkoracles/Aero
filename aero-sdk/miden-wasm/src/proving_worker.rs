@@ -20,9 +20,12 @@ use std::{
 };
 use wasm_bindgen::prelude::*;
 use web_sys::{console, DedicatedWorkerGlobalScope, MessageEvent};
-use winter_air::Air;
+use winter_air::{Air, AuxTraceRandElements};
 use winter_crypto::{hashers::Blake2s_256, ByteDigest, MerkleTree};
-use winter_prover::{Matrix, Prover, ProverChannel, Serializable, StarkDomain, StarkProof, Trace};
+use winter_prover::{
+    ConstraintEvaluationTable, ConstraintEvaluator, Matrix, Prover, ProverChannel, Serializable,
+    StarkDomain, StarkProof, Trace, TraceLde,
+};
 
 pub struct ResolvableFuture<T> {
     pub result: Rc<RefCell<Vec<T>>>,
@@ -324,15 +327,12 @@ impl MidenProverAsyncWorker {
             )
             .map_err(|err| format!("Cannot run commit_to_trace_and_validate: {:?}", err))?;
 
-        let constraint_evaluations = prover
-            .evaluate_constraints(
-                &air,
-                &domain,
-                &mut channel,
-                trace_commitment.trace_table(),
-                aux_trace_rand_elements,
-            )
-            .map_err(|err| format!("Cannot run evaluate_constraints: {:?}", err))?;
+        let constraint_evaluations = self.evaluate_constraints(
+            &mut channel,
+            trace_commitment.trace_table(),
+            aux_trace_rand_elements.clone(),
+            &domain,
+        );
         Ok(prover
             .prove_after_constraint_eval(
                 &air,
@@ -342,6 +342,53 @@ impl MidenProverAsyncWorker {
                 trace_commitment,
             )
             .map_err(|err| format!("Cannot run prove_after_build_trace_commitment: {:?}", err))?)
+    }
+
+    fn evaluate_constraints<'a>(
+        &'a self,
+        channel: &mut ProverChannel<<ExecutionProver as Prover>::Air, Felt, Blake2s_256<Felt>>,
+        trace_table: &TraceLde<Felt>,
+        aux_trace_rand_elements: AuxTraceRandElements<Felt>,
+        domain: &'a StarkDomain<Felt>,
+    ) -> ConstraintEvaluationTable<Felt> {
+        let air = self.air.as_ref().unwrap();
+        // 2 ----- evaluate constraints -----------------------------------------------------------
+        // evaluate constraints specified by the AIR over the constraint evaluation domain, and
+        // compute random linear combinations of these evaluations using coefficients drawn from
+        // the channel; this step evaluates only constraint numerators, thus, only constraints with
+        // identical denominators are merged together. the results are saved into a constraint
+        // evaluation table where each column contains merged evaluations of constraints with
+        // identical denominators.
+        let constraint_coeffs = channel.get_constraint_composition_coeffs();
+        // build a list of constraint divisors; currently, all transition constraints have the same
+        // divisor which we put at the front of the list; boundary constraint divisors are appended
+        // after that
+        let evaluator: ConstraintEvaluator<_, Felt> =
+            ConstraintEvaluator::new(air, aux_trace_rand_elements, constraint_coeffs);
+        // build a list of constraint divisors; currently, all transition constraints have the same
+        // divisor which we put at the front of the list; boundary constraint divisors are appended
+        // after that
+        let mut divisors = vec![evaluator.transition_constraints.divisor().clone()];
+        divisors.append(&mut evaluator.boundary_constraints.get_divisors());
+
+        // allocate space for constraint evaluations; when we are in debug mode, we also allocate
+        // memory to hold all transition constraint evaluations (before they are merged into a
+        // single value) so that we can check their degrees later
+        #[cfg(not(debug_assertions))]
+        let mut evaluation_table = ConstraintEvaluationTable::<E>::new(domain, divisors);
+        #[cfg(debug_assertions)]
+        let mut evaluation_table = ConstraintEvaluationTable::<Felt>::new(
+            &domain,
+            divisors,
+            &evaluator.transition_constraints,
+        );
+        let mut fragments = evaluation_table.fragments(8);
+        let frag_num = 8;
+        for i in 0..frag_num {
+            let frag = &mut fragments[i];
+            evaluator.evaluate_fragment(trace_table, &domain, frag);
+        }
+        evaluation_table
     }
 
     fn prove_sequential(
