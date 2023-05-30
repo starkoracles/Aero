@@ -44,7 +44,7 @@ pub fn constraint_compute(work_item: &ConstraintComputeWorkItem) -> Result<Uint8
     // memory to hold all transition constraint evaluations (before they are merged into a
     // single value) so that we can check their degrees later
     #[cfg(not(debug_assertions))]
-    let mut evaluation_table = ConstraintEvaluationTable::<E>::new(domain, divisors);
+    let mut evaluation_table = ConstraintEvaluationTable::<Felt>::new(&domain, divisors);
     #[cfg(debug_assertions)]
     let mut evaluation_table = ConstraintEvaluationTable::<Felt>::new(
         &domain,

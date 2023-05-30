@@ -71,6 +71,7 @@ pub struct MidenProverAsyncWorker {
     trace_lde: Option<Matrix<Felt>>,
     worker_pool: WorkerPool,
     trace_row_hashes: Rc<RefCell<Vec<(usize, Vec<ByteDigest<32>>)>>>,
+    constraint_evaluations: Rc<RefCell<Vec<ConstraintComputeResult>>>,
     chunk_size: Option<usize>,
     prover: Option<ExecutionProver>,
     air: Option<ProcessorAir>,
@@ -93,6 +94,7 @@ impl MidenProverAsyncWorker {
             trace_lde: None,
             worker_pool,
             trace_row_hashes: Rc::new(RefCell::new(Vec::new())),
+            constraint_evaluations: Rc::new(RefCell::new(Vec::new())),
             chunk_size: None,
             prover: None,
             air: None,
@@ -112,6 +114,7 @@ impl MidenProverAsyncWorker {
             trace_lde: None,
             worker_pool: self.worker_pool.clone(),
             trace_row_hashes: Rc::new(RefCell::new(Vec::new())),
+            constraint_evaluations: Rc::new(RefCell::new(Vec::new())),
             chunk_size: None,
             prover: None,
             air: None,
@@ -165,7 +168,7 @@ impl MidenProverAsyncWorker {
             self.program_outputs.clone().unwrap(),
         );
         console::time_with_label("prove_final_stage");
-        let proof = self.prove_epilogue(&prover, main_trace_tree)?;
+        let proof = self.prove_epilogue(&prover, main_trace_tree).await?;
         console::time_end_with_label("prove_final_stage");
 
         let pub_inputs = PublicInputs::new(
@@ -306,7 +309,7 @@ impl MidenProverAsyncWorker {
         Ok(())
     }
 
-    fn prove_epilogue(
+    async fn prove_epilogue(
         &mut self,
         prover: &ExecutionProver,
         main_trace_tree: MerkleTree<Blake2s_256<Felt>>,
@@ -328,12 +331,16 @@ impl MidenProverAsyncWorker {
             )
             .map_err(|err| format!("Cannot run commit_to_trace_and_validate: {:?}", err))?;
 
-        let constraint_evaluations = self.evaluate_constraints(
-            &mut channel,
-            trace_commitment.trace_table(),
-            aux_trace_rand_elements.clone(),
-            &domain,
-        )?;
+        console::time_with_label("constraint_evaluations");
+        let constraint_evaluations = self
+            .evaluate_constraints(
+                &mut channel,
+                trace_commitment.trace_table(),
+                aux_trace_rand_elements.clone(),
+                &domain,
+            )
+            .await?;
+        console::time_end_with_label("constraint_evaluations");
         Ok(prover
             .prove_after_constraint_eval(
                 &air,
@@ -345,7 +352,7 @@ impl MidenProverAsyncWorker {
             .map_err(|err| format!("Cannot run prove_after_build_trace_commitment: {:?}", err))?)
     }
 
-    fn evaluate_constraints<'a>(
+    async fn evaluate_constraints<'a>(
         &'a self,
         channel: &mut ProverChannel<<ExecutionProver as Prover>::Air, Felt, Blake2s_256<Felt>>,
         trace_table: &TraceLde<Felt>,
@@ -379,14 +386,13 @@ impl MidenProverAsyncWorker {
         // memory to hold all transition constraint evaluations (before they are merged into a
         // single value) so that we can check their degrees later
         #[cfg(not(debug_assertions))]
-        let mut evaluation_table = ConstraintEvaluationTable::<E>::new(domain, divisors);
+        let mut evaluation_table_workers = ConstraintEvaluationTable::<Felt>::new(domain, divisors);
         #[cfg(debug_assertions)]
-        let mut evaluation_table = ConstraintEvaluationTable::<Felt>::new(
+        let mut evaluation_table_workers = ConstraintEvaluationTable::<Felt>::new(
             &domain,
             divisors,
             &evaluator.transition_constraints,
         );
-        let mut fragments = evaluation_table.fragments(8);
         let frag_num = 8;
         let pub_inputs = PublicInputs::new(
             self.program.clone().unwrap().hash(),
@@ -410,12 +416,22 @@ impl MidenProverAsyncWorker {
             self.worker_pool
                 .run_constraint(constraint_work_item, self.get_on_msg_callback_constraints())?;
         }
-        for i in 0..frag_num {
-            let frag = &mut fragments[i];
-            evaluator.evaluate_fragment(trace_table, &domain, frag);
+        let fut = ResolvableFuture {
+            result: self.constraint_evaluations.clone(),
+            exepected_size: 8,
+        };
+        fut.await;
+        for evaluation in self.constraint_evaluations.borrow().iter() {
+            for i in 0..evaluation.constraint_evaluations[0].len() {
+                let step = i + evaluation.frag_index;
+                let mut row = vec![];
+                for col in 0..evaluation.constraint_evaluations.len() {
+                    row.push(evaluation.constraint_evaluations[col][i].0);
+                }
+                evaluation_table_workers.update_row(step, &row);
+            }
         }
-        info!("{:?}", &evaluation_table.evaluations);
-        Ok(evaluation_table)
+        Ok(evaluation_table_workers)
     }
 
     fn prove_sequential(
@@ -518,14 +534,12 @@ impl MidenProverAsyncWorker {
     }
 
     fn get_on_msg_callback_constraints(&self) -> Closure<dyn FnMut(MessageEvent)> {
+        let constraint_evaluations = self.constraint_evaluations.clone();
         let callback = Closure::new(move |event: MessageEvent| {
             let result =
                 from_uint8array::<ConstraintComputeResult>(&Uint8Array::new(&event.data()))
                     .unwrap();
-            info!(
-                "Constraint get_on_msg_callback thread got message, {:?}",
-                result
-            );
+            constraint_evaluations.borrow_mut().push(result);
         });
         callback
     }
