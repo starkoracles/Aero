@@ -3,7 +3,7 @@ use std::{marker::PhantomData, sync::Once};
 use js_sys::Uint8Array;
 use miden_air::{Felt, PublicInputs, StarkField};
 use serde::{ser::SerializeSeq, Deserializer, Serializer};
-use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 use winter_air::{
     AuxTraceRandElements, ConstraintCompositionCoefficients, ProofOptions, TraceInfo, TraceLayout,
@@ -336,14 +336,8 @@ pub struct ConstraintComputeWorkItem {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct ComputationFragment {
-    fragment_offset: usize,
-    fragment_rows: usize,
-    total_rows: usize,
-    fragment_columns: usize,
-    #[cfg(debug_assertions)]
-    tm_columns: usize,
-    #[cfg(debug_assertions)]
-    ta_columns: usize,
+    pub fragment_offset: usize,
+    pub num_fragments: usize,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -414,6 +408,13 @@ pub struct HashingResult {
     pub hashes: Vec<[u8; 32]>,
 }
 
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct ConstraintComputeResult {
+    pub frag_index: usize,
+    pub frag_num: usize,
+    pub constraint_evaluations: Vec<Vec<FeltWrapper>>,
+}
+
 #[wasm_bindgen(getter_with_clone)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct ProverOutput {
@@ -437,9 +438,9 @@ pub fn to_uint8array<T: serde::Serialize>(data: &T) -> Uint8Array {
     Uint8Array::from(serialized.as_slice())
 }
 
-pub fn from_uint8array<T: serde::de::DeserializeOwned>(data: &Uint8Array) -> T {
+pub fn from_uint8array<T: serde::de::DeserializeOwned>(data: &Uint8Array) -> Result<T, JsValue> {
     let bytes = data.to_vec();
-    bincode::deserialize(bytes.as_slice()).unwrap()
+    bincode::deserialize(bytes.as_slice()).map_err(|e| JsValue::from_str(&format!("{}", e)))
 }
 
 #[cfg(test)]
@@ -519,13 +520,7 @@ mod work_item_test {
 
         let computation_fragment = ComputationFragment {
             fragment_offset: 0,
-            fragment_rows: 8,
-            fragment_columns: 2,
-            total_rows: 16,
-            #[cfg(debug_assertions)]
-            tm_columns: 2,
-            #[cfg(debug_assertions)]
-            ta_columns: 3,
+            num_fragments: 8,
         };
 
         let public_inputs = PublicInputs::new(program.hash(), stack_inputs, program_outputs);

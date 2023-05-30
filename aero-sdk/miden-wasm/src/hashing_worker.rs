@@ -28,13 +28,16 @@ pub fn blake2_hash_elements(work_item: &HashingWorkItem) -> Result<Uint8Array, J
 #[wasm_bindgen]
 pub fn hashing_entry_point(msg: MessageEvent) -> Result<(), JsValue> {
     set_once_logger();
-    let work_item: HashingWorkItem = from_uint8array(&Uint8Array::new(&msg.data()));
-    debug!(
-        "Hashing worker received work item: {:?}",
-        work_item.batch_idx
-    );
-    let response = blake2_hash_elements(&work_item)?;
-    let global_scope = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
-    global_scope.post_message(&response)?;
+    if let Ok(work_item) = from_uint8array::<HashingWorkItem>(&Uint8Array::new(&msg.data())) {
+        debug!(
+            "Hashing worker received work item: {:?}",
+            work_item.batch_idx
+        );
+        let response = blake2_hash_elements(&work_item)?;
+        let global_scope = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
+        global_scope.post_message(&response)?;
+    } else {
+        debug!("Hashing worker received invalid work item");
+    }
     Ok(())
 }

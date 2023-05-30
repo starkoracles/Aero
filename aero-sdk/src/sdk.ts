@@ -5,6 +5,7 @@ import { MidenProgramOutputs, MidenPublicInputs } from "./proto-ts/miden_vm";
 import { FieldExtension, HashFunction, PrimeField, ProofOptions } from "./proto-ts/context";
 import "./hashing_worker";
 import "./proving_worker";
+import "./constraints_worker";
 
 var miden_prover: MidenProver = null;
 init().then(() => {

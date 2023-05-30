@@ -2,7 +2,8 @@ use crate::convert::convert_proof::*;
 use crate::convert::sdk::sdk;
 use crate::pool::WorkerPool;
 use crate::utils::{
-    from_uint8array, set_once_logger, to_uint8array, HashingResult, ProverOutput, ProvingWorkItem,
+    from_uint8array, set_once_logger, to_uint8array, ComputationFragment, ConstraintComputeResult,
+    ConstraintComputeWorkItem, HashingResult, ProverOutput, ProvingWorkItem,
 };
 use futures::Future;
 use js_sys::Uint8Array;
@@ -332,7 +333,7 @@ impl MidenProverAsyncWorker {
             trace_commitment.trace_table(),
             aux_trace_rand_elements.clone(),
             &domain,
-        );
+        )?;
         Ok(prover
             .prove_after_constraint_eval(
                 &air,
@@ -350,7 +351,7 @@ impl MidenProverAsyncWorker {
         trace_table: &TraceLde<Felt>,
         aux_trace_rand_elements: AuxTraceRandElements<Felt>,
         domain: &'a StarkDomain<Felt>,
-    ) -> ConstraintEvaluationTable<Felt> {
+    ) -> Result<ConstraintEvaluationTable<Felt>, JsValue> {
         let air = self.air.as_ref().unwrap();
         // 2 ----- evaluate constraints -----------------------------------------------------------
         // evaluate constraints specified by the AIR over the constraint evaluation domain, and
@@ -363,8 +364,11 @@ impl MidenProverAsyncWorker {
         // build a list of constraint divisors; currently, all transition constraints have the same
         // divisor which we put at the front of the list; boundary constraint divisors are appended
         // after that
-        let evaluator: ConstraintEvaluator<_, Felt> =
-            ConstraintEvaluator::new(air, aux_trace_rand_elements, constraint_coeffs);
+        let evaluator: ConstraintEvaluator<_, Felt> = ConstraintEvaluator::new(
+            air,
+            aux_trace_rand_elements.clone(),
+            constraint_coeffs.clone(),
+        );
         // build a list of constraint divisors; currently, all transition constraints have the same
         // divisor which we put at the front of the list; boundary constraint divisors are appended
         // after that
@@ -384,11 +388,34 @@ impl MidenProverAsyncWorker {
         );
         let mut fragments = evaluation_table.fragments(8);
         let frag_num = 8;
+        let pub_inputs = PublicInputs::new(
+            self.program.clone().unwrap().hash(),
+            self.program_inputs.clone().unwrap().stack_init().to_vec(),
+            self.program_outputs.clone().unwrap(),
+        );
+        let proof_options = self.proof_options.as_ref().unwrap().0.clone();
+        for i in 0..frag_num {
+            let constraint_work_item = ConstraintComputeWorkItem {
+                trace_info: air.trace_info().clone(),
+                public_inputs: pub_inputs.clone(),
+                proof_options: proof_options.clone(),
+                trace_lde: trace_table.clone(),
+                constraint_coeffs: constraint_coeffs.clone(),
+                aux_rand_elements: aux_trace_rand_elements.clone(),
+                computation_fragment: ComputationFragment {
+                    num_fragments: frag_num,
+                    fragment_offset: i,
+                },
+            };
+            self.worker_pool
+                .run_constraint(constraint_work_item, self.get_on_msg_callback_constraints())?;
+        }
         for i in 0..frag_num {
             let frag = &mut fragments[i];
             evaluator.evaluate_fragment(trace_table, &domain, frag);
         }
-        evaluation_table
+        info!("{:?}", &evaluation_table.evaluations);
+        Ok(evaluation_table)
     }
 
     fn prove_sequential(
@@ -476,7 +503,7 @@ impl MidenProverAsyncWorker {
         let callback = Closure::new(move |event: MessageEvent| {
             debug!("Proving get_on_msg_callback thread got message");
             let data: Uint8Array = Uint8Array::new(&event.data());
-            let hashing_result: HashingResult = from_uint8array(&data);
+            let hashing_result: HashingResult = from_uint8array(&data).unwrap();
             let hashes = hashing_result
                 .hashes
                 .into_iter()
@@ -489,6 +516,19 @@ impl MidenProverAsyncWorker {
 
         callback
     }
+
+    fn get_on_msg_callback_constraints(&self) -> Closure<dyn FnMut(MessageEvent)> {
+        let callback = Closure::new(move |event: MessageEvent| {
+            let result =
+                from_uint8array::<ConstraintComputeResult>(&Uint8Array::new(&event.data()))
+                    .unwrap();
+            info!(
+                "Constraint get_on_msg_callback thread got message, {:?}",
+                result
+            );
+        });
+        callback
+    }
 }
 
 #[wasm_bindgen]
@@ -499,15 +539,18 @@ pub async fn proving_entry_point(
     set_once_logger();
     debug!("got proving workload");
     let data: Uint8Array = Uint8Array::new(&msg.data());
-    let proving_work_item: ProvingWorkItem = from_uint8array(&data);
-    let prover_output = if proving_work_item.is_sequential {
-        prover.prove_sequential(proving_work_item)?
+    if let Ok(proving_work_item) = from_uint8array::<ProvingWorkItem>(&data) {
+        let prover_output = if proving_work_item.is_sequential {
+            prover.prove_sequential(proving_work_item)?
+        } else {
+            prover.prove(proving_work_item).await?
+        };
+        let payload = to_uint8array(&prover_output);
+        let global_scope = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
+        global_scope.post_message(&payload)?;
+        debug!("sent payload back to main thread");
     } else {
-        prover.prove(proving_work_item).await?
-    };
-    let payload = to_uint8array(&prover_output);
-    let global_scope = js_sys::global().unchecked_into::<DedicatedWorkerGlobalScope>();
-    global_scope.post_message(&payload)?;
-    debug!("sent payload back to main thread");
+        debug!("failed to decode proving workload");
+    }
     Ok(())
 }

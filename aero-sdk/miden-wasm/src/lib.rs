@@ -13,6 +13,7 @@ macro_rules! console_log {
     ($($t:tt)*) => (crate::log(&format_args!($($t)*).to_string()))
 }
 
+pub mod constraints_worker;
 pub mod convert;
 pub mod hashing_worker;
 pub mod pool;
@@ -152,7 +153,7 @@ impl MidenProver {
         let callback = Closure::new(move |event: MessageEvent| {
             debug!("Main thread got prover output");
             let data: Uint8Array = Uint8Array::new(&event.data());
-            let output: ProverOutput = from_uint8array(&data);
+            let output: ProverOutput = from_uint8array(&data).unwrap();
             prover_output.replace(Some(output));
         });
 
