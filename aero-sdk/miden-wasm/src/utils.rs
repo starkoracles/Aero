@@ -326,12 +326,18 @@ pub struct ConstraintComputeWorkItem {
         deserialize_with = "deserialize_constraint_coeffs"
     )]
     pub constraint_coeffs: ConstraintCompositionCoefficients<Felt>,
+    #[serde(with = "serde_bytes")]
+    pub trace_lde_wrapper: Vec<u8>,
+    pub computation_fragment: ComputationFragment,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct TraceLdeWrapper {
     #[serde(
         serialize_with = "serialize_trace_lde",
         deserialize_with = "deserialize_trace_lde"
     )]
     pub trace_lde: TraceLde<Felt>,
-    pub computation_fragment: ComputationFragment,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -518,6 +524,9 @@ mod work_item_test {
             vec![Felt::from(5u64), Felt::from(6u64)],
         ]));
 
+        let trace_lde_wrapper = TraceLdeWrapper { trace_lde };
+        let trace_lde_serialized = bincode::serialize(&trace_lde_wrapper).unwrap();
+
         let computation_fragment = ComputationFragment {
             fragment_offset: 0,
             num_fragments: 8,
@@ -530,7 +539,7 @@ mod work_item_test {
             proof_options,
             aux_rand_elements,
             constraint_coeffs,
-            trace_lde,
+            trace_lde_wrapper: trace_lde_serialized,
             computation_fragment,
         };
         println!("{}", serde_json::to_string(&work_item).unwrap());
@@ -567,7 +576,15 @@ mod work_item_test {
 
         // trace lde
         let mut work_item_main_trace = vec![];
-        for i in 0..work_item.trace_lde.main_segment_lde.num_rows() {
+        let trace_lde_wrapper_payload = work_item.trace_lde_wrapper;
+        let trace_lde_wrapper: TraceLdeWrapper =
+            bincode::deserialize(&trace_lde_wrapper_payload).unwrap();
+        for i in 0..work_item
+            .trace_lde_wrapper
+            .trace_lde
+            .main_segment_lde
+            .num_rows()
+        {
             let mut r = vec![];
             work_item
                 .trace_lde
@@ -576,9 +593,9 @@ mod work_item_test {
             work_item_main_trace.push(r);
         }
         let mut deserialized_main_trace = vec![];
-        for i in 0..deserialized.trace_lde.main_segment_lde.num_rows() {
+        for i in 0..trace_lde_wrapper.trace_lde.main_segment_lde.num_rows() {
             let mut r = vec![];
-            deserialized
+            trace_lde_wrapper
                 .trace_lde
                 .main_segment_lde
                 .read_row_into(i, &mut r);

@@ -1,6 +1,6 @@
 use crate::utils::{
     from_uint8array, set_once_logger, to_uint8array, ConstraintComputeResult,
-    ConstraintComputeWorkItem, FeltWrapper,
+    ConstraintComputeWorkItem, FeltWrapper, TraceLdeWrapper,
 };
 use js_sys::Uint8Array;
 use log::debug;
@@ -38,7 +38,9 @@ pub fn constraint_compute(work_item: &ConstraintComputeWorkItem) -> Result<Uint8
     divisors.append(&mut evaluator.boundary_constraints.get_divisors());
 
     let domain = StarkDomain::new(&air);
-    let trace_table = &work_item.trace_lde;
+    let trace_lde_wrapper: TraceLdeWrapper = bincode::deserialize(&work_item.trace_lde_wrapper)
+        .map_err(|e| JsValue::from_str(&format!("cannot deser traceLdeWrapper: {}", e)))?;
+    let trace_table = &trace_lde_wrapper.trace_lde;
 
     // allocate space for constraint evaluations; when we are in debug mode, we also allocate
     // memory to hold all transition constraint evaluations (before they are merged into a

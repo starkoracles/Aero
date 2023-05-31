@@ -3,7 +3,7 @@ use crate::convert::sdk::sdk;
 use crate::pool::WorkerPool;
 use crate::utils::{
     from_uint8array, set_once_logger, to_uint8array, ComputationFragment, ConstraintComputeResult,
-    ConstraintComputeWorkItem, HashingResult, ProverOutput, ProvingWorkItem,
+    ConstraintComputeWorkItem, HashingResult, ProverOutput, ProvingWorkItem, TraceLdeWrapper,
 };
 use futures::Future;
 use js_sys::Uint8Array;
@@ -400,12 +400,16 @@ impl MidenProverAsyncWorker {
             self.program_outputs.clone().unwrap(),
         );
         let proof_options = self.proof_options.as_ref().unwrap().0.clone();
+        let trace_lde_wrapper = TraceLdeWrapper {
+            trace_lde: trace_table.clone(),
+        };
+        let serialized_trace_wrapper = bincode::serialize(&trace_lde_wrapper).unwrap();
         for i in 0..frag_num {
             let constraint_work_item = ConstraintComputeWorkItem {
                 trace_info: air.trace_info().clone(),
                 public_inputs: pub_inputs.clone(),
                 proof_options: proof_options.clone(),
-                trace_lde: trace_table.clone(),
+                trace_lde_wrapper: serialized_trace_wrapper.clone(),
                 constraint_coeffs: constraint_coeffs.clone(),
                 aux_rand_elements: aux_trace_rand_elements.clone(),
                 computation_fragment: ComputationFragment {
@@ -542,6 +546,25 @@ impl MidenProverAsyncWorker {
             constraint_evaluations.borrow_mut().push(result);
         });
         callback
+    }
+}
+
+pub async fn proving_seq_entry_point(
+    prover: &mut MidenProverAsyncWorker,
+    payload: Uint8Array,
+) -> Result<Uint8Array, JsValue> {
+    if let Ok(proving_work_item) = from_uint8array::<ProvingWorkItem>(&payload) {
+        let prover_output = if proving_work_item.is_sequential {
+            prover.prove_sequential(proving_work_item)?
+        } else {
+            prover.prove(proving_work_item).await?
+        };
+        let payload = to_uint8array(&prover_output);
+        debug!("sent payload back to main thread");
+        Ok(payload)
+    } else {
+        debug!("failed to decode proving workload");
+        Err(JsValue::from_str("failed to decode proving workload"))
     }
 }
 
