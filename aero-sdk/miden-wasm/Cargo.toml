@@ -23,7 +23,7 @@ winter_verifier = { package = "winter-verifier", path = "../../winterfell/verifi
 winter_prover = { package = "winter-prover", path = "../../winterfell/prover", version = "0.4", features = ["wasm"], default-features = false }
 winter_utils = { package = "winter-utils", path = "../../winterfell/utils/core", version = "0.4", default-features = false }
 log = "0.4.17"
-web-sys = { version = "0.3.61", features = ["console", "DedicatedWorkerGlobalScope", "ErrorEvent", "Window", "Navigator", "WorkerNavigator"] }
+web-sys = { version = "0.3.61", features = ["console", "DedicatedWorkerGlobalScope", "ErrorEvent", "Window", "Navigator", "WorkerNavigator", "Document", "HtmlElement"] }
 js-sys = "0.3.61"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.64"

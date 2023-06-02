@@ -3,6 +3,7 @@ import { MidenProgram, MidenProgramInputs } from "./proto-ts/miden_prover";
 import { StarkProof } from "./proto-ts/stark_proof";
 import { MidenProgramOutputs, MidenPublicInputs } from "./proto-ts/miden_vm";
 import { FieldExtension, HashFunction, PrimeField, ProofOptions } from "./proto-ts/context";
+import { sha256_gpu } from "@marco_ciaramella/sha256-gpu";
 import "./hashing_worker";
 import "./proving_worker";
 import "./constraints_worker";
@@ -27,7 +28,22 @@ export async function prove(program: MidenProgram, inputs: MidenProgramInputs, o
     let program_bytes = MidenProgram.encode(program).finish();
     let input_bytes = MidenProgramInputs.encode(inputs).finish();
     let option_bytes = ProofOptions.encode(options).finish();
-    let proof_outputs = await miden_prover.prove(program_bytes, input_bytes, option_bytes, 1024);
+    let proof_outputs = await miden_prover.prove(program_bytes, input_bytes, option_bytes, 1024, true);
+
+    let messages = document.querySelectorAll('#hashes > div');
+    var to_process: Array<Uint8Array> = [];
+    messages.forEach((message) => {
+        let m = JSON.parse(message.innerHTML);
+        let arr = new Uint8Array(m);
+        to_process.push(arr);
+    });
+    console.log("to_process", to_process);
+    console.time("sha256_gpu");
+    const hashes = await sha256_gpu(to_process);
+    console.timeEnd("sha256_gpu");
+    // for (let hash of hashes) {
+    //     console.log(hash.reduce((a, b) => a + b.toString(16).padStart(2, '0'), ''));
+    // }
 
     let proof = StarkProof.decode(proof_outputs.proof);
     let outputs = MidenProgramOutputs.decode(proof_outputs.program_outputs);
@@ -49,7 +65,7 @@ export async function prove_sequential(program: MidenProgram, inputs: MidenProgr
     let program_bytes = MidenProgram.encode(program).finish();
     let input_bytes = MidenProgramInputs.encode(inputs).finish();
     let option_bytes = ProofOptions.encode(options).finish();
-    let proof_outputs = await miden_prover.prove_sequential(program_bytes, input_bytes, option_bytes);
+    let proof_outputs = await miden_prover.prove_sequential(program_bytes, input_bytes, option_bytes, true);
 
     let proof = StarkProof.decode(proof_outputs.proof);
     let outputs = MidenProgramOutputs.decode(proof_outputs.program_outputs);

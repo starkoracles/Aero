@@ -3,7 +3,8 @@ use crate::convert::sdk::sdk;
 use crate::pool::WorkerPool;
 use crate::utils::{
     from_uint8array, set_once_logger, to_uint8array, ComputationFragment, ConstraintComputeResult,
-    ConstraintComputeWorkItem, HashingResult, ProverOutput, ProvingWorkItem, TraceLdeWrapper,
+    ConstraintComputeWorkItem, FeltWrapper, HashingResult, ProverOutput, ProvingWorkItem,
+    TraceLdeWrapper,
 };
 use futures::Future;
 use js_sys::Uint8Array;
@@ -20,7 +21,7 @@ use std::{
     task::{Context, Poll},
 };
 use wasm_bindgen::prelude::*;
-use web_sys::{console, DedicatedWorkerGlobalScope, MessageEvent};
+use web_sys::{console, DedicatedWorkerGlobalScope, HtmlElement, MessageEvent};
 use winter_air::{Air, AuxTraceRandElements};
 use winter_crypto::{hashers::Blake2s_256, ByteDigest, MerkleTree};
 use winter_prover::{
@@ -287,12 +288,26 @@ impl MidenProverAsyncWorker {
         let num_of_batches = trace_lde.num_rows() / chunk_size;
         let mut dispatched_idx = 0;
 
+        let document = web_sys::window().unwrap().document().unwrap();
+        let parent = document
+            .get_element_by_id("hashes")
+            .unwrap()
+            .unchecked_into::<HtmlElement>();
         for i in 0..num_of_batches {
             let mut batch = vec![];
             for _ in 0..chunk_size {
                 let mut row = vec![Felt::ZERO; trace_lde.num_cols()];
                 trace_lde.read_row_into(dispatched_idx, &mut row);
-                let converted = row.iter().map(|f| f.into()).collect();
+                let converted: Vec<FeltWrapper> = row.iter().map(|f| f.into()).collect();
+                let message: Vec<u8> = converted
+                    .clone()
+                    .iter()
+                    .map(|f| f.0.as_int().to_le_bytes())
+                    .flatten()
+                    .collect();
+                let d = document.create_element("div")?;
+                d.set_text_content(Some(format!("{:?}", message).as_str()));
+                parent.append_child(&d)?;
                 batch.push(converted);
                 dispatched_idx += 1;
             }
