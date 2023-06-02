@@ -27,7 +27,7 @@ export async function prove(program: MidenProgram, inputs: MidenProgramInputs, o
     let program_bytes = MidenProgram.encode(program).finish();
     let input_bytes = MidenProgramInputs.encode(inputs).finish();
     let option_bytes = ProofOptions.encode(options).finish();
-    let proof_outputs = await miden_prover.prove(program_bytes, input_bytes, option_bytes, 1024);
+    let proof_outputs = await miden_prover.prove(program_bytes, input_bytes, option_bytes, 1024, true);
 
     let proof = StarkProof.decode(proof_outputs.proof);
     let outputs = MidenProgramOutputs.decode(proof_outputs.program_outputs);
@@ -49,7 +49,7 @@ export async function prove_sequential(program: MidenProgram, inputs: MidenProgr
     let program_bytes = MidenProgram.encode(program).finish();
     let input_bytes = MidenProgramInputs.encode(inputs).finish();
     let option_bytes = ProofOptions.encode(options).finish();
-    let proof_outputs = await miden_prover.prove_sequential(program_bytes, input_bytes, option_bytes);
+    let proof_outputs = await miden_prover.prove_sequential(program_bytes, input_bytes, option_bytes, true);
 
     let proof = StarkProof.decode(proof_outputs.proof);
     let outputs = MidenProgramOutputs.decode(proof_outputs.program_outputs);
