@@ -19,7 +19,7 @@
   "author": "starkoracles",
   "license": "MIT",
   "dependencies": {
-    "@marco_ciaramella/sha256-gpu": "^1.0.17",
+    "@marco_ciaramella/sha256-gpu": "^1.1.0",
     "miden-wasm": "file:./miden-wasm/pkg",
     "protobufjs": "^7.2.3",
     "ts-proto": "^1.146.0"

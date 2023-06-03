@@ -6,7 +6,7 @@ const FIB_NUM = 1000;
 async function onPageLoad() {
   document.querySelector("body").innerHTML = `<h1>Proving the ${FIB_NUM}th fib number!</h1><button id="run_proof">Run Proof</button><button id="run_proof_sequential">Run Proof sequential</button><h2 id="result"></h2><div id="hashes" style="display: none;"></div>`;
   console.log("Hello!");
-  document.addEventListener('DOMContentLoaded', function () {
+  setTimeout(async () => {
     const button = document.getElementById('run_proof');
 
     button.addEventListener('click', async () => {
@@ -18,7 +18,7 @@ async function onPageLoad() {
     button_seq.addEventListener('click', async () => {
       await runProofSequential();
     });
-  });
+  }, 1000);
 }
 
 async function runProof() {
