@@ -13,6 +13,7 @@ macro_rules! console_log {
     ($($t:tt)*) => (crate::log(&format_args!($($t)*).to_string()))
 }
 
+pub mod constraints_worker;
 pub mod convert;
 pub mod hashing_worker;
 pub mod pool;
@@ -20,6 +21,7 @@ pub mod proving_worker;
 pub mod utils;
 use crate::convert::sdk::sdk;
 use crate::utils::{from_uint8array, to_uint8array, ProverOutput, ProvingWorkItem};
+use proving_worker::{proving_seq_entry_point, MidenProverAsyncWorker};
 
 pub struct ResultFuture<T> {
     pub result: Rc<RefCell<Option<T>>>,
@@ -91,6 +93,7 @@ impl MidenProver {
         program_inputs: Vec<u8>,
         proof_options: Vec<u8>,
         chunk_size: usize,
+        local_run: bool,
     ) -> Result<ProverOutput, JsValue> {
         self.set_onmessage_handler();
         let work_item = ProvingWorkItem {
@@ -101,14 +104,21 @@ impl MidenProver {
             is_sequential: false,
         };
         let payload = to_uint8array(&work_item);
-        self.prover_worker.post_message(&payload)?;
-        ResultFuture {
-            result: self.prover_output.clone(),
-        }
-        .await;
+        if local_run {
+            let mut miden_prover = MidenProverAsyncWorker::new()?;
+            let output = proving_seq_entry_point(&mut miden_prover, payload).await?;
 
-        let output = self.prover_output.borrow_mut().take().unwrap();
-        Ok(output)
+            let deser_output: ProverOutput = from_uint8array(&output).unwrap();
+            Ok(deser_output)
+        } else {
+            self.prover_worker.post_message(&payload)?;
+            ResultFuture {
+                result: self.prover_output.clone(),
+            }
+            .await;
+            let output = self.prover_output.borrow_mut().take().unwrap();
+            Ok(output)
+        }
     }
 
     #[wasm_bindgen]
@@ -117,6 +127,7 @@ impl MidenProver {
         program: Vec<u8>,
         program_inputs: Vec<u8>,
         proof_options: Vec<u8>,
+        local_run: bool,
     ) -> Result<ProverOutput, JsValue> {
         self.set_onmessage_handler();
         let work_item = ProvingWorkItem {
@@ -127,14 +138,21 @@ impl MidenProver {
             is_sequential: true,
         };
         let payload = to_uint8array(&work_item);
-        self.prover_worker.post_message(&payload)?;
-        ResultFuture {
-            result: self.prover_output.clone(),
-        }
-        .await;
+        if local_run {
+            let mut miden_prover = MidenProverAsyncWorker::new()?;
+            let output = proving_seq_entry_point(&mut miden_prover, payload).await?;
 
-        let output = self.prover_output.borrow_mut().take().unwrap();
-        Ok(output)
+            let deser_output: ProverOutput = from_uint8array(&output).unwrap();
+            Ok(deser_output)
+        } else {
+            self.prover_worker.post_message(&payload)?;
+            ResultFuture {
+                result: self.prover_output.clone(),
+            }
+            .await;
+            let output = self.prover_output.borrow_mut().take().unwrap();
+            Ok(output)
+        }
     }
 
     fn set_onmessage_handler(&mut self) {
@@ -152,7 +170,7 @@ impl MidenProver {
         let callback = Closure::new(move |event: MessageEvent| {
             debug!("Main thread got prover output");
             let data: Uint8Array = Uint8Array::new(&event.data());
-            let output: ProverOutput = from_uint8array(&data);
+            let output: ProverOutput = from_uint8array(&data).unwrap();
             prover_output.replace(Some(output));
         });
 

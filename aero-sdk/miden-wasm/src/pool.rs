@@ -5,7 +5,7 @@ use log::debug;
 use wasm_bindgen::prelude::*;
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, Worker, WorkerNavigator};
 
-use crate::utils::{to_uint8array, HashingWorkItem, VecWrapper};
+use crate::utils::{to_uint8array, ConstraintComputeWorkItem, FeltWrapper, HashingWorkItem};
 
 #[derive(Debug, Clone)]
 pub struct WorkerPool {
@@ -15,6 +15,7 @@ pub struct WorkerPool {
 #[derive(Debug, Clone)]
 struct PoolState {
     workers: Vec<Worker>,
+    constraint_workers: Vec<Worker>,
 }
 
 impl WorkerPool {
@@ -30,11 +31,14 @@ impl WorkerPool {
         let mut pool = WorkerPool {
             state: PoolState {
                 workers: Vec::with_capacity(concurrency),
+                constraint_workers: Vec::with_capacity(concurrency),
             },
         };
         for _ in 0..concurrency {
-            let worker = pool.spawn()?;
+            let worker = pool.spawn("./hashing_worker.js")?;
             pool.state.push(worker);
+            let constraint_worker = pool.spawn("./constraints_worker.js")?;
+            pool.state.push_constraint_worker(constraint_worker);
         }
 
         Ok(pool)
@@ -49,15 +53,15 @@ impl WorkerPool {
     ///
     /// Returns any error that may happen while a JS web worker is created and a
     /// message is sent to it.
-    fn spawn(&self) -> Result<Worker, JsValue> {
-        console_log!("spawning new worker");
+    fn spawn(&self, worker_path: &str) -> Result<Worker, JsValue> {
+        console_log!("spawning new worker, {}", worker_path);
         // TODO: what do do about `./worker.js`:
         //
         // * the path is only known by the bundler. How can we, as a
         //   library, know what's going on?
         // * How do we not fetch a script N times? It internally then
         //   causes another script to get fetched N times...
-        let worker = Worker::new("./hashing_worker.js")?;
+        let worker = Worker::new(worker_path)?;
         worker.post_message(&JsValue::from_str("wake worker up"))?;
         Ok(worker)
     }
@@ -67,10 +71,15 @@ impl WorkerPool {
         Ok(worker)
     }
 
+    fn constraint_worker(&self, worker_idx: usize) -> Result<&Worker, JsValue> {
+        let worker = &self.state.constraint_workers[worker_idx];
+        Ok(worker)
+    }
+
     fn execute(
         &self,
         batch_idx: usize,
-        elements_table: Vec<VecWrapper>,
+        elements_table: Vec<Vec<FeltWrapper>>,
         get_on_msg_callback: Closure<dyn FnMut(MessageEvent)>,
     ) -> Result<(), JsValue> {
         debug!(
@@ -92,16 +101,46 @@ impl WorkerPool {
         get_on_msg_callback.forget();
         Ok(())
     }
+
+    fn execute_constraint(
+        &self,
+        constraint_work_item: ConstraintComputeWorkItem,
+        get_on_msg_callback: Closure<dyn FnMut(MessageEvent)>,
+    ) -> Result<(), JsValue> {
+        debug!(
+            "fragment_offset: {}, concurrency: {}",
+            constraint_work_item.computation_fragment.fragment_offset,
+            self.state.concurrency()
+        );
+        let worker_idx =
+            constraint_work_item.computation_fragment.fragment_offset % self.state.concurrency();
+        debug!("running on worker idx: {}", worker_idx);
+        let worker = self.constraint_worker(worker_idx)?;
+        let payload = to_uint8array(&constraint_work_item);
+        worker.post_message(&payload)?;
+        worker.set_onmessage(Some(get_on_msg_callback.as_ref().unchecked_ref()));
+        get_on_msg_callback.forget();
+        Ok(())
+    }
 }
 
 impl WorkerPool {
     pub fn run(
         &self,
         batch_idx: usize,
-        elements_table: Vec<VecWrapper>,
+        elements_table: Vec<Vec<FeltWrapper>>,
         get_on_msg_callback: Closure<dyn FnMut(MessageEvent)>,
     ) -> Result<(), JsValue> {
         self.execute(batch_idx, elements_table, get_on_msg_callback)?;
+        Ok(())
+    }
+
+    pub fn run_constraint(
+        &self,
+        constraint_work_item: ConstraintComputeWorkItem,
+        get_on_msg_callback: Closure<dyn FnMut(MessageEvent)>,
+    ) -> Result<(), JsValue> {
+        self.execute_constraint(constraint_work_item, get_on_msg_callback)?;
         Ok(())
     }
 }
@@ -109,6 +148,10 @@ impl WorkerPool {
 impl PoolState {
     fn push(&mut self, worker: Worker) {
         self.workers.push(worker);
+    }
+
+    fn push_constraint_worker(&mut self, worker: Worker) {
+        self.constraint_workers.push(worker);
     }
 
     fn concurrency(&self) -> usize {

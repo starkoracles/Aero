@@ -45,6 +45,15 @@ module.exports = {
                     }
                 }, { loader: 'ts-loader', }],
             },
+            {
+                test: /src\/constraints_worker\.ts$/,
+                use: [{
+                    loader: 'worker-loader',
+                    options: {
+                        filename: 'constraints_worker.js',
+                    }
+                }, { loader: 'ts-loader', }],
+            },
         ]
     },
     plugins: [
