@@ -4,3 +4,6 @@
 [submodule "winterfell"]
 	path = winterfell
 	url = git@github.com:starkoracles/winterfell.git
+[submodule "aero-sdk-v0.6/winterfell-pkg"]
+	path = aero-sdk-v0.6/winterfell-pkg
+	url = git@github.com:starkoracles/winterfell.git
