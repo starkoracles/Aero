@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package sdk;
+
+import "common.proto";
+
+message EvaluationFrame {
+    repeated FieldElement current = 1;
+    repeated FieldElement next = 2;
+}
+
+message OodFrame {
+    EvaluationFrame main_frame = 1;
+    EvaluationFrame aux_frame = 2;
+    repeated FieldElement evaluations = 3;
+}

@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package sdk;
+
+import "common.proto";
+
+message BatchMerkleProofLayer {
+    repeated Digest nodes = 1;
+}
+
+message BatchMerkleProof {
+    repeated Digest leaves = 1;
+    repeated BatchMerkleProofLayer nodes = 2;
+    uint32 depth = 3;
+}
+
+message TraceQueries {
+    Table main_states = 1;
+    Table aux_states = 2;
+    repeated BatchMerkleProof query_proofs = 3;
+}
+
+message ConstraintQueries {
+    Table evaluations = 1;
+    BatchMerkleProof query_proof = 2;
+}

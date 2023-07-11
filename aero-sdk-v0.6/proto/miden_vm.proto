@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package sdk;
+
+import "common.proto";
+
+message MidenProgramOutputs {
+    /// The elements on the stack at the end of execution.
+    repeated FieldElement stack = 1;
+    /// The overflow table row addresse required to reconstruct the final state of the table.
+    repeated FieldElement overflow_addrs = 2;
+}
+
+message MidenPublicInputs {
+    Digest program_hash = 1;
+    repeated FieldElement stack_inputs = 2;
+    MidenProgramOutputs outputs = 3;
+}
