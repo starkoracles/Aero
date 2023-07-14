@@ -10,6 +10,8 @@ wasm-bindgen-futures = "0.4"
 futures = "0.3"
 log = "0.4.17"
 console_error_panic_hook = "0.1.7"
+wgpu = "0.16.2"
+bytemuck = "1.13.1"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"

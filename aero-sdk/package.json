@@ -8,6 +8,7 @@
     "build:proto": "rm -rf src/proto-ts && mkdir -p src/proto-ts && protoc --plugin=node_modules/ts-proto/protoc-gen-ts_proto --ts_proto_opt=esModuleInterop=true proto/miden_prover.proto proto/miden_vm.proto proto/stark_proof.proto --ts_proto_out=./src/proto-ts -Iproto",
     "build:wasm": "rm -rf node_modules/miden-wasm && cd miden-wasm && wasm-pack build --release --target web --out-name miden-wasm --out-dir pkg && cd .. && npm install",
     "build:wasm:debug": "rm -rf node_modules/miden-wasm && cd miden-wasm && wasm-pack build --debug --target web --out-name miden-wasm --out-dir pkg && cd .. && npm install",
+    "build:rpo:debug": "rm -rf node_modules/rpo-gpu && cd rpo-gpu && RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --debug --target web --out-name rpo-gpu --out-dir pkg && cd .. && npm install",
     "build": "npm run build:wasm && npm run build:proto && tsc",
     "build:debug": "npm run build:wasm:debug && npm run build:proto && tsc",
     "serve:demo": "webpack serve --config webpack.config.demo.js --mode development --open"
