@@ -15,15 +15,18 @@ struct DeepComposer {
 }
 
 func deep_composer_new{range_check_ptr}(
-    air: AirInstance, query_positions: felt*, z: felt, cc: DeepCompositionCoefficients
+    air: AirInstance, 
+    query_positions: felt*, 
+    z: felt, 
+    cc: DeepCompositionCoefficients,
+    domain_offset: felt,
+    n_query_positions: felt
 ) -> DeepComposer {
     alloc_locals;
 
     let g = air.trace_domain_generator;
     let g_lde = air.lde_domain_generator;
-    let domain_offset = 7;  // TODO why is this hardcoded?
-
-    // TODO: Don't hardcode the number of query positions here
+    
     let (x_coordinates: felt*) = alloc();
 
     let z_next = [range_check_ptr];
@@ -32,7 +35,7 @@ func deep_composer_new{range_check_ptr}(
     // TODO this is insecure - need to properly run goldilocks mul within cairo
     %{
         PG = 18446744069414584321 # 2^64 - 2^32 - 1
-        for i in range(27):
+        for i in range(ids.n_query_positions):
             x = pow(ids.g_lde, memory[ids.query_positions + i], PG)
             x = (x * ids.domain_offset) % PG
             memory[ids.x_coordinates + i] = x
@@ -143,6 +146,9 @@ func compose_trace_columns{range_check_ptr}(
     queried_aux_trace_states: Table,
     ood_main_frame: EvaluationFrame,
     ood_aux_frame: EvaluationFrame,
+    n_queries: felt,
+    inner_loop_len_main: felt,
+    inner_loop_len_aux: felt,
 ) -> felt* {
     alloc_locals;
 
@@ -155,21 +161,18 @@ func compose_trace_columns{range_check_ptr}(
     // Compose columns of the main segment
     let (local mock_prev_result: felt*) = alloc();
     let (local result: felt*) = alloc();
-    // TODO HARDCODE: Don't hardcode the number of query and columns
-    tempvar n = 27;
     tempvar result_ptr = result;
     tempvar mock_prev_results_ptr = mock_prev_result;
 
-    // TODO HARDCODE do not hardcode inner loop len
     compose_loop(
         result_ptr,
         mock_prev_results_ptr,
-        n,
+        n_queries,
         composer,
         queried_main_trace_states,
         ood_main_frame,
         0,
-        72,
+        inner_loop_len_main,
         0,
     );
 
@@ -181,14 +184,19 @@ func compose_trace_columns{range_check_ptr}(
 
     // Compose columns of the main segment
     let (local with_aux_result: felt*) = alloc();
-    // TODO HARDCODE: Don't hardcode the number of query and columns
-    tempvar n = 27;
     tempvar result_ptr = with_aux_result;
     tempvar prev_result_ptr = result;
 
-    // TODO HARDCODE do not hardcode inner loop len
     compose_loop(
-        result_ptr, prev_result_ptr, n, composer, queried_aux_trace_states, ood_aux_frame, 72, 9, 1
+        result_ptr, 
+        prev_result_ptr, 
+        n_queries, 
+        composer, 
+        queried_aux_trace_states, 
+        ood_aux_frame, 
+        inner_loop_len_main, 
+        inner_loop_len_aux, 
+        1,
     );
     return with_aux_result;
 }
@@ -253,7 +261,7 @@ func compose_constraint_evaluations_loop{range_check_ptr}(
 }
 
 func compose_constraint_evaluations{range_check_ptr}(
-    composer: DeepComposer, queried_evaluations: Table, ood_evaluations: Vec
+    composer: DeepComposer, queried_evaluations: Table, ood_evaluations: Vec, n_queries: felt
 ) -> felt* {
     alloc_locals;
 
@@ -266,9 +274,8 @@ func compose_constraint_evaluations{range_check_ptr}(
 
     tempvar result_ptr = result;
 
-    // TODO HARDCODE: don't hardcode number of queries
     compose_constraint_evaluations_loop(
-        composer, queried_evaluations, ood_evaluations, 0, result_ptr, 27, z_m
+        composer, queried_evaluations, ood_evaluations, 0, result_ptr, n_queries, z_m
     );
 
     return result;
@@ -302,15 +309,13 @@ func combine_compositions_loop{range_check_ptr}(
 }
 
 func combine_compositions{range_check_ptr}(
-    composer: DeepComposer, t_composition: felt*, c_composition: felt*
+    composer: DeepComposer, t_composition: felt*, c_composition: felt*, n_queries: felt
 ) -> felt* {
     alloc_locals;
 
     let (local result: felt*) = alloc();
-    // TODO HARDCODE: Don't hardcode number of queries
-    tempvar n = 27;
 
-    combine_compositions_loop(composer, t_composition, c_composition, result, 0, n);
+    combine_compositions_loop(composer, t_composition, c_composition, result, 0, n_queries);
 
     return result;
 }

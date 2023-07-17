@@ -143,14 +143,14 @@ func get_constraint_composition_coefficients{
 
 // Returns coefficients needed to construct the DEEP composition polynomial
 func get_deep_composition_coefficients{
-    range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuiltin*, public_coin: PublicCoin
+    range_check_ptr, blake2s_ptr: felt*, bitwise_ptr: BitwiseBuiltin*, public_coin: PublicCoin//, nb_coefficients: felt
 }(air: AirInstance) -> DeepCompositionCoefficients {
     alloc_locals;
 
     let (t_coefficients: TraceCoefficients*) = alloc();
     set_trace_coefficients(
         n_vec= air.context.trace_layout.main_segment_width + air.aux_trace_width,
-        n_coefficients=3, // TODO: Why is 3 hardcoded?
+        n_coefficients = 3, //nb_coefficients, 
         coefficients=t_coefficients,
     );
 

@@ -142,6 +142,14 @@ func perform_verification{
 
     // Draw an out-of-domain point z from the coin.
     let z = draw();
+
+    //HOW TO GET DOMAIN OFFSET AND NB QUERY POSITIONS ?
+    let n_query_positions = 27;
+    let domain_offset = 7;
+    let n_queries = 27; // = n_query_positions ?
+    let inner_loop_len_main = 72;
+    let inner_loop_len_aux = 9;
+
     // 3 ----- OOD consistency check --------------------------------------------------------------
 
     // Read the out-of-domain trace frames (the main trace frame and auxiliary trace frame, if
@@ -236,7 +244,8 @@ func perform_verification{
 
     // Compute evaluations of the DEEP composition polynomial at the queried positions.
     let composer = deep_composer_new(
-        air=air, query_positions=query_positions, z=z, cc=deep_coefficients
+        air=air, query_positions=query_positions, z=z, cc=deep_coefficients,
+        domain_offset=domain_offset, n_query_positions=n_query_positions
     );
     %{
         coeffs = [memory[ids.composer.x_coordinates + i] for i in range(0, 27)]
@@ -248,11 +257,14 @@ func perform_verification{
         queried_aux_trace_states,
         ood_main_trace_frame,
         ood_aux_trace_frame,
+        n_queries,
+        inner_loop_len_main,
+        inner_loop_len_aux,
     );
     let c_composition = compose_constraint_evaluations(
-        composer, queried_constraint_evaluations, ood_constraint_evaluations
+        composer, queried_constraint_evaluations, ood_constraint_evaluations, n_queries
     );
-    let deep_evaluations = combine_compositions(composer, t_composition, c_composition);
+    let deep_evaluations = combine_compositions(composer, t_composition, c_composition, n_queries);
 
     // 7 ----- Verify low-degree proof -------------------------------------------------------------
 
