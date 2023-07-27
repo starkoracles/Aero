@@ -144,11 +144,11 @@ func perform_verification{
     let z = draw();
 
     //HOW TO GET DOMAIN OFFSET AND NB QUERY POSITIONS ?
-    let n_query_positions = 27;
+
     let domain_offset = 7;
-    let n_queries = 27; // = n_query_positions ?
-    let inner_loop_len_main = 72;
-    let inner_loop_len_aux = 9;
+    let n_queries = air.options.num_queries; // = n_query_positions ?
+    let inner_loop_len_main = air.main_segment_width;
+    let inner_loop_len_aux = air.aux_trace_width;
 
     // 3 ----- OOD consistency check --------------------------------------------------------------
 
@@ -245,10 +245,10 @@ func perform_verification{
     // Compute evaluations of the DEEP composition polynomial at the queried positions.
     let composer = deep_composer_new(
         air=air, query_positions=query_positions, z=z, cc=deep_coefficients,
-        domain_offset=domain_offset, n_query_positions=n_query_positions
+        domain_offset=domain_offset, n_query_positions=n_queries
     );
     %{
-        coeffs = [memory[ids.composer.x_coordinates + i] for i in range(0, 27)]
+        coeffs = [memory[ids.composer.x_coordinates + i] for i in range(0, ids.n_queries)]
         print("deep", coeffs, ids.composer.z_curr, ids.composer.z_next)
     %}
     let t_composition = compose_trace_columns(
